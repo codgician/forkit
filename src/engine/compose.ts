@@ -37,6 +37,8 @@ export interface ComposedBranch {
 	/** Absent when the branch already matched. */
 	previous: string | undefined;
 	changed: boolean;
+	/** Directory holding the composed tree, for the container build. */
+	worktree: string;
 }
 
 export class ComposeError extends Error {
@@ -79,6 +81,7 @@ export async function composeBranch(
 			skipped: [],
 			previous,
 			changed: previous !== sourceCommit,
+			worktree: git.cwd,
 		};
 	}
 
@@ -119,6 +122,7 @@ export async function composeBranch(
 		skipped,
 		previous,
 		changed: previous !== commit,
+		worktree: git.cwd,
 	};
 }
 

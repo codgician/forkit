@@ -194,6 +194,20 @@ export class Git {
 		return stdout;
 	}
 
+
+	async updateRef(ref: string, commit: string): Promise<void> {
+		await this.git(["update-ref", ref, commit]);
+	}
+
+	async createBundle(path: string, refs: string[]): Promise<void> {
+		if (refs.length === 0) throw new Error("Cannot create an empty git bundle");
+		await this.git(["bundle", "create", path, ...refs]);
+	}
+
+	async fetchBundle(path: string, ref: string): Promise<void> {
+		await this.git(["fetch", path, `${ref}:refs/forkit/checkout`]);
+		await this.checkoutDetached("refs/forkit/checkout");
+	}
 	/** True when the working tree has no staged or unstaged changes. */
 	async isClean(): Promise<boolean> {
 		const { stdout } = await this.git(["status", "--porcelain"]);

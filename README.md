@@ -134,18 +134,31 @@ GITHUB_TOKEN=$(gh auth token) FORKIT_DRY_RUN=1 bun run src/main.ts
 Add `repositories/<owner>/<repo>/forkit.yaml`. Repositories are discovered by
 glob; there is no central registry, and nothing else needs editing.
 
-Each fork gets its own runner, so a slow container build in one does not delay
-another, and a failure in one does not cancel the rest. Runs are serialised per
-fork rather than globally: two runs of the same fork would race on its branches
-and tags, while different forks never touch the same refs.
+Each fork gets an isolated workflow. Within it, compose runs exactly once and
+hands the resulting commit to one native runner per architecture. The final job
+combines their digests into a single OCI manifest before moving the branch.
 
-Anything a project needs beyond git is declared in its own file — which
-Dockerfile to build, and the command that proves the image runs:
+For the built-in platforms, both runners use Ubuntu 24.04:
+
+| platform | runner |
+| --- | --- |
+| `linux/amd64` | `ubuntu-24.04` |
+| `linux/arm64` | `ubuntu-24.04-arm` |
+
+There is no QEMU and no architecture in the image name. A client pulls the
+entry matching its own platform from the same tag.
+
+A failure in one fork does not cancel another. Runs are serialised per fork at
+publication, where two runs would otherwise race on its branches and tags.
+
+Anything a project needs beyond git is declared in its own file — platforms,
+Dockerfile, and the command that proves the image runs:
 
 ```yaml
     container:
       image: ghcr.io/codgician/litellm
       dockerfile: Dockerfile
+      platforms: [linux/amd64, linux/arm64]
       smoke:
         entrypoint: litellm
         command: ["--version"]
