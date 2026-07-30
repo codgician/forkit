@@ -48,7 +48,7 @@ describe("semver ordering", () => {
 });
 
 describe("resolveSource", () => {
-	test("mirror branches resolve to a branch refspec", async () => {
+	test("branch tracking resolves to a branch refspec", async () => {
 		const track: TrackSpec = { kind: "branch", branch: "main" };
 		expect(resolveSource(track, "BerriAI/litellm", snapshot())).toEqual({
 			ref: "main",

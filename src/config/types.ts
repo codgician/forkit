@@ -17,7 +17,7 @@ export interface BranchRule {
 	track: TrackSpec;
 	/**
 	 * Ordered fork branch names whose deltas are applied on top of the tracked
-	 * source. Empty for mirror branches.
+	 * source. Empty means the branch is a direct mirror.
 	 */
 	contributions: string[];
 	/** What to do when applying a contribution conflicts. */

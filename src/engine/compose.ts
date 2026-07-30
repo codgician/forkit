@@ -74,8 +74,8 @@ export async function composeBranch(
 		? await git.revParse(localPrevious)
 		: await git.remoteTip(FORK_REMOTE, rule.name);
 
-	if (rule.track.kind === "branch") {
-		// A mirror is the upstream commit itself; nothing is composed on top.
+	if (rule.track.kind === "branch" && rule.contributions.length === 0) {
+		// A branch without contributions is a direct mirror of its upstream tip.
 		return {
 			branch: rule.name,
 			source,

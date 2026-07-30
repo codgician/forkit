@@ -117,16 +117,35 @@ public on a public repository.
 
 ## Running it
 
+Direnv enters the locked Nix development shell. Install the locked JavaScript
+dependencies once after entering it:
+
 ```bash
-bun install
-GITHUB_TOKEN=$(gh auth token) FORKIT_DRY_RUN=1 bun run src/main.ts
+direnv allow
+bun install --frozen-lockfile
 ```
 
-`FORKIT_DRY_RUN=1` composes and builds without pushing anything.
+Forkit's workflow operations are project-local pi commands. They work in an
+interactive pi session or headlessly, exactly as invoked by GitHub Actions:
+
+```bash
+export FORKIT_REPOSITORY=codgician/litellm
+export GITHUB_TOKEN=...
+export FORKIT_DRY_RUN=1
+
+pi --no-session -p /forkit-plan
+pi --no-session -p /forkit-compose
+FORKIT_PLATFORM=linux/amd64 pi --no-session -p /forkit-build
+```
+
+Compose writes `source/`; build reads it. Publish additionally reads `digests/`.
+Unset `FORKIT_DRY_RUN` before `/forkit-publish` to permit publication.
 
 | Variable | Purpose |
 | --- | --- |
-| `GITHUB_TOKEN` | Required. GraphQL and pushes. |
+| `FORKIT_REPOSITORY` | Managed `owner/repository`; required except when planning all repositories. |
+| `FORKIT_PLATFORM` | Required by `/forkit-build`, for example `linux/amd64`. |
+| `GITHUB_TOKEN` | Required by compose and publish for GitHub access. |
 | `DENDRO_API_KEY` | Resolver credential. Unset means conflicts fail. |
 | `TRAJECTORY_ZIP_PASSWD` | Encrypts trajectory archives. |
 | `FORKIT_DRY_RUN` | `1` to skip every push. |

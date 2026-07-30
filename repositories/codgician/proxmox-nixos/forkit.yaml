@@ -1,0 +1,18 @@
+# Forkit configuration for codgician/proxmox-nixos.
+#
+# my tracks upstream main and carries the NixOS 26.05 contribution. There is
+# intentionally no container: maintaining the generated branch is the target.
+
+fork: codgician/proxmox-nixos
+
+upstream:
+  repository: SaumonNet/proxmox-nixos
+  branch: main
+
+branches:
+  my:
+    track:
+      branch: main
+    contributions:
+      - nixos-26.05
+    on_conflict: ai

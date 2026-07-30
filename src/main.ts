@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import { AiConflictResolver } from "./ai/resolver.ts";
 import { discoverConfigFiles, loadConfig } from "./config/load.ts";
 import type { RepoConfig } from "./config/types.ts";
@@ -162,6 +162,13 @@ async function createResolver(platform: string | undefined): Promise<ConflictRes
 }
 
 async function readDigests(directory: string): Promise<Record<string, string[]>> {
+	try {
+		await access(directory);
+	} catch (error) {
+		if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return {};
+		throw error;
+	}
+
 	const glob = new Bun.Glob("**/*.txt");
 	const byBranch: Record<string, string[]> = {};
 	for await (const path of glob.scan({ cwd: directory, absolute: true })) {

@@ -11,6 +11,9 @@ on:
       - "repositories/**"
       - "src/**"
       - ".github/workflows/**"
+      - ".pi/**"
+      - "flake.nix"
+      - "flake.lock"
   workflow_dispatch:
     inputs:
       repository:
@@ -32,17 +35,13 @@ jobs:
       repositories: ${{ steps.plan.outputs.repositories }}
     steps:
       - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.14"
-      - run: bun install --frozen-lockfile
+      - uses: cachix/install-nix-action@v31
+      - run: nix develop --command bun install --frozen-lockfile
       - id: plan
         env:
-          TARGET_REPOSITORY: ${{ inputs.repository }}
+          FORKIT_REPOSITORY: ${{ inputs.repository }}
         run: |
-          args=(--plan)
-          [ -z "$TARGET_REPOSITORY" ] || args+=(--repository "$TARGET_REPOSITORY")
-          plan=$(bun run src/main.ts "${args[@]}")
+          plan=$(nix develop --command pi --no-session -p /forkit-plan)
           echo "repositories=$(jq -c '.repositories' <<<"$plan")" >> "$GITHUB_OUTPUT"
 
   # One isolated DAG per fork. A failure in one does not block another: each

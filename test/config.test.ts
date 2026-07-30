@@ -71,11 +71,16 @@ describe("loadConfig", () => {
 		expect(track.match.test("v1.95.0-dev.2")).toBe(false);
 	});
 
-	test("rejects a mirror branch that declares contributions", async () => {
-		const path = await writeConfig(
-			`${BASE}  main:\n    track:\n      branch: upstream\n    contributions: [topic]\n`,
-		);
-		expect(loadConfig(path)).rejects.toThrow(/cannot declare/);
+	test("resolves the branch-based proxmox config", async () => {
+		const config = await loadConfig("repositories/codgician/proxmox-nixos/forkit.yaml");
+		const my = config.branches.find((branch) => branch.name === "my");
+
+		expect(config.fork).toBe("codgician/proxmox-nixos");
+		expect(config.upstream).toEqual({ repository: "SaumonNet/proxmox-nixos", branch: "main" });
+		expect(my?.track).toEqual({ kind: "branch", branch: "main" });
+		expect(my?.contributions).toEqual(["nixos-26.05"]);
+		expect(my?.onConflict).toBe("ai");
+		expect(my?.container).toBeUndefined();
 	});
 
 	test("rejects more than one tracking form", async () => {
@@ -123,9 +128,10 @@ describe("loadConfig", () => {
 });
 
 describe("discoverConfigFiles", () => {
-	test("finds the litellm config in this repository", async () => {
+	test("finds every managed repository config", async () => {
 		expect(await discoverConfigFiles(".")).toEqual([
 			"repositories/codgician/litellm/forkit.yaml",
+			"repositories/codgician/proxmox-nixos/forkit.yaml",
 		]);
 	});
 

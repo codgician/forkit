@@ -97,11 +97,7 @@ const BranchRule = z
 		on_conflict: OnConflict,
 		container: Container.optional(),
 	})
-	.strict()
-	.refine((rule) => !("branch" in rule.track) || rule.contributions.length === 0, {
-		message: "a branch that mirrors upstream cannot declare `contributions`",
-		path: ["contributions"],
-	});
+	.strict();
 
 export const RepoConfigFile = z
 	.object({
