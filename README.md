@@ -98,14 +98,16 @@ build, or an API error.
 ## Records
 
 The durable record of a resolution is its commit message, which carries
-provenance trailers:
+notification-free provenance trailers. Pull request numbers are deliberately
+excluded: pushing a generated commit must never create activity on an upstream
+review.
 
 ```
 Forkit-Contribution: litellm_configurable_copilot_headers
 Forkit-Source-Base: 2f2e1e75...
 Forkit-Source-Head: 6bfcea21...
 Forkit-Applied-To: v1.94.0
-Forkit-Upstream-PR: #34889
+Forkit-Input: sha256:...
 ```
 
 Resolver trajectories are development telemetry for tuning the harness, not

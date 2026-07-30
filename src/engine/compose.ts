@@ -252,7 +252,7 @@ function inputFingerprint(sourceCommit: string, outcomes: ContributionOutcome[])
 	);
 
 	return `sha256:${createHash("sha256")
-		.update(JSON.stringify({ format: 1, sourceCommit, inputs }))
+		.update(JSON.stringify({ format: 2, sourceCommit, inputs }))
 		.digest("hex")}`;
 }
 
@@ -286,7 +286,6 @@ function contributionMessage(input: {
 		`Forkit-Applied-To: ${input.source.ref}`,
 		`Forkit-Input: ${input.fingerprint}`,
 	);
-	if (input.pullRequest) lines.push(`Forkit-Upstream-PR: #${input.pullRequest.number}`);
 	if (input.resolution) lines.push("Forkit-Resolved-By: ai");
 
 	return lines.join("\n");
