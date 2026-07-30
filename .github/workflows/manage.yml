@@ -33,7 +33,7 @@ jobs:
     outputs:
       repositories: ${{ steps.list.outputs.repositories }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -70,7 +70,7 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # GITHUB_TOKEN is scoped to this repository, so it cannot push to a
       # managed fork. The App installation can.
