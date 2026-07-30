@@ -10,7 +10,7 @@ on:
     paths:
       - "repositories/**"
       - "src/**"
-      - ".github/workflows/**"
+      - ".github/**"
       - ".pi/**"
       - "flake.nix"
       - "flake.lock"

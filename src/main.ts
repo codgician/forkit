@@ -103,7 +103,7 @@ async function writeComposeOutputs(artifact: RepositoryArtifact): Promise<void> 
 	const existing = (await Bun.file(path).text().catch(() => "")) || "";
 	await Bun.write(
 		path,
-		`${existing}builds=${JSON.stringify(builds)}\nchanged=${changed}\n`,
+		`${existing}builds=${JSON.stringify(builds)}\nhas_builds=${builds.length > 0}\nchanged=${changed}\n`,
 	);
 }
 
