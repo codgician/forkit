@@ -135,6 +135,23 @@ describe("Git primitives", () => {
 		await git.addRemote("origin", originDir);
 		expect(await git.remoteTip("origin", "absent")).toBeUndefined();
 	});
+
+	test("same tree, parent, identity, date, and message produce the same commit", async () => {
+		const git = await newRepo();
+		const base = await commitFile(git, "a.txt", "base\n", "base");
+		const date = "2026-07-01T12:34:56+00:00";
+		const message = "generated\n\nForkit-Input: sha256:abc";
+
+		await Bun.write(join(git.cwd, "a.txt"), "generated\n");
+		const first = await git.commitAll(message, { date });
+
+		await git.checkoutDetached(base);
+		await Bun.write(join(git.cwd, "a.txt"), "generated\n");
+		const second = await git.commitAll(message, { date });
+
+		expect(second).toBe(first);
+		expect(await git.trailer(second, "Forkit-Input")).toBe("sha256:abc");
+	});
 });
 
 describe("resolution gates", () => {

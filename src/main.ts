@@ -8,6 +8,7 @@ import {
 	buildArtifactPlatform,
 	createRepositoryArtifact,
 	publishRepositoryArtifact,
+	type RepositoryArtifact,
 } from "./engine/artifact.ts";
 
 /**
@@ -33,7 +34,6 @@ async function main(): Promise<number> {
 		return 0;
 	}
 
-
 	const artifactDirectory = resolve(valueOf(args, "--artifact") ?? "forkit-artifact");
 	const platform = valueOf(args, "--platform");
 	const dryRun = process.env.FORKIT_DRY_RUN === "1";
@@ -46,6 +46,7 @@ async function main(): Promise<number> {
 		for (const branch of artifact.branches) {
 			console.log(`branch ${branch.name}: ${branch.changed ? "changed" : "unchanged"} ${branch.commit.slice(0, 8)}`);
 		}
+		await writeComposeOutputs(artifact);
 		return 0;
 	}
 
@@ -84,6 +85,26 @@ async function loadAllConfigs(): Promise<RepoConfig[]> {
 	const configs: RepoConfig[] = [];
 	for (const path of paths) configs.push(await loadConfig(path));
 	return configs;
+}
+
+async function writeComposeOutputs(artifact: RepositoryArtifact): Promise<void> {
+	const path = process.env.GITHUB_OUTPUT;
+	if (!path) return;
+
+	const platforms = [
+		...new Set(
+			artifact.branches
+				.filter((branch) => branch.changed)
+				.flatMap((branch) => branch.container?.platforms ?? []),
+		),
+	];
+	const builds = platforms.map((platform) => ({ platform, runner: runnerFor(platform) }));
+	const changed = artifact.branches.some((branch) => branch.changed);
+	const existing = (await Bun.file(path).text().catch(() => "")) || "";
+	await Bun.write(
+		path,
+		`${existing}builds=${JSON.stringify(builds)}\nchanged=${changed}\n`,
+	);
 }
 
 function requireOne(configs: RepoConfig[], operation: string): RepoConfig {

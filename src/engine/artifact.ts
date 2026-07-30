@@ -71,6 +71,16 @@ export async function createRepositoryArtifact(
 				(branch) => `+refs/heads/${branch}:refs/remotes/${FORK_REMOTE}/${branch}`,
 			),
 		);
+		// Existing generated tips carry Forkit-Input. Fetching them lets compose
+		// short-circuit before patching, AI, archives, builders, or GHCR. Fetch
+		// independently because a newly configured branch may not exist yet.
+		for (const rule of config.branches) {
+			await workspace
+				.fetch(FORK_REMOTE, [
+					`+refs/heads/${rule.name}:refs/remotes/${FORK_REMOTE}/${rule.name}`,
+				])
+				.catch(() => {});
+		}
 		await workspace.fetch(
 			UPSTREAM_REMOTE,
 			[...new Set(snapshot.openPullRequests.map((pull) => pull.baseRef))].map(

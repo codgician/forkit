@@ -15,7 +15,10 @@ export interface ConflictState {
 export class Git {
 	constructor(readonly cwd: string) {}
 
-	async git(args: string[], options: { check?: boolean; stdin?: string } = {}): Promise<RunResult> {
+	async git(
+		args: string[],
+		options: { check?: boolean; stdin?: string; env?: Record<string, string> } = {},
+	): Promise<RunResult> {
 		return run(["git", ...args], { cwd: this.cwd, ...options });
 	}
 
@@ -131,16 +134,36 @@ export class Git {
 		return stdout.split("\n").filter((line) => line.length > 0);
 	}
 
-	async commitAll(message: string, options: { allowEmpty?: boolean } = {}): Promise<string> {
+	async commitAll(
+		message: string,
+		options: { allowEmpty?: boolean; date?: string } = {},
+	): Promise<string> {
 		await this.git(["add", "--all"]);
-		await this.git([
-			"commit",
-			"--no-verify",
-			...(options.allowEmpty ? ["--allow-empty"] : []),
-			"-m",
-			message,
-		]);
+		const env = options.date
+			? { GIT_AUTHOR_DATE: options.date, GIT_COMMITTER_DATE: options.date }
+			: undefined;
+		await this.git(
+			[
+				"commit",
+				"--no-verify",
+				...(options.allowEmpty ? ["--allow-empty"] : []),
+				"-m",
+				message,
+			],
+			{ env },
+		);
 		return this.revParse("HEAD");
+	}
+
+	async commitDate(ref: string): Promise<string> {
+		return this.value(["show", "-s", "--format=%cI", ref]);
+	}
+
+	async trailer(ref: string, key: string): Promise<string | undefined> {
+		const message = await this.value(["show", "-s", "--format=%B", ref]);
+		const prefix = `${key}:`;
+		const line = message.split("\n").find((candidate) => candidate.startsWith(prefix));
+		return line?.slice(prefix.length).trim() || undefined;
 	}
 
 	/** Replace `branch` with the current HEAD, locally. */

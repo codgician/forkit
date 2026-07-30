@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { BranchRule, RepoConfig } from "../config/types.ts";
 import { checkResolution } from "../git/gates.ts";
 import type { ConflictState, Git } from "../git/git.ts";
@@ -68,7 +69,10 @@ export async function composeBranch(
 	await git.fetch(UPSTREAM_REMOTE, [`+${source.fetchSpec}:refs/forkit/source`]);
 	const sourceCommit = await git.revParse("refs/forkit/source");
 
-	const previous = await git.remoteTip(FORK_REMOTE, rule.name);
+	const localPrevious = `${FORK_REMOTE}/${rule.name}`;
+	const previous = (await git.exists(localPrevious))
+		? await git.revParse(localPrevious)
+		: await git.remoteTip(FORK_REMOTE, rule.name);
 
 	if (rule.track.kind === "branch") {
 		// A mirror is the upstream commit itself; nothing is composed on top.
@@ -85,31 +89,56 @@ export async function composeBranch(
 		};
 	}
 
-	await git.checkoutDetached(sourceCommit);
-
-	const applied: string[] = [];
-	const skipped: ComposedBranch["skipped"] = [];
-
+	// Resolve every input before touching the worktree. This fingerprint is the
+	// branch's lock: if the current tip carries it, exactly the same release and
+	// contribution deltas have already been published. Reuse that commit without
+	// applying patches, invoking AI, starting builders, or touching GHCR.
+	const outcomes: ContributionOutcome[] = [];
 	for (const branch of rule.contributions) {
-		const outcome = await resolveContribution(
-			branch,
-			git,
-			FORK_REMOTE,
-			config.upstream.repository,
-			config.fork,
-			config.upstream.branch,
-			sourceCommit,
-			snapshot,
-			github,
+		outcomes.push(
+			await resolveContribution(
+				branch,
+				git,
+				FORK_REMOTE,
+				config.upstream.repository,
+				config.fork,
+				config.upstream.branch,
+				sourceCommit,
+				snapshot,
+				github,
+			),
 		);
+	}
 
-		if (outcome.status === "skip") {
-			skipped.push({ branch: outcome.branch, reason: outcome.reason });
-			continue;
+	const fingerprint = inputFingerprint(sourceCommit, outcomes);
+	const applied = outcomes
+		.filter((outcome): outcome is Extract<ContributionOutcome, { status: "apply" }> => outcome.status === "apply")
+		.map((outcome) => outcome.contribution.branch);
+	const skipped = outcomes
+		.filter((outcome): outcome is Extract<ContributionOutcome, { status: "skip" }> => outcome.status === "skip")
+		.map((outcome) => ({ branch: outcome.branch, reason: outcome.reason }));
+
+	if (previous && (await git.exists(previous))) {
+		const previousFingerprint = await git.trailer(previous, "Forkit-Input");
+		if (previousFingerprint === fingerprint) {
+			return {
+				branch: rule.name,
+				source,
+				sourceCommit,
+				commit: previous,
+				applied,
+				skipped,
+				previous,
+				changed: false,
+				worktree: git.cwd,
+			};
 		}
+	}
 
-		await applyContribution(outcome, rule, config, git, source, resolver);
-		applied.push(branch);
+	await git.checkoutDetached(sourceCommit);
+	for (const outcome of outcomes) {
+		if (outcome.status === "skip") continue;
+		await applyContribution(outcome, rule, config, git, source, resolver, fingerprint);
 	}
 
 	const commit = await git.revParse("HEAD");
@@ -133,6 +162,7 @@ async function applyContribution(
 	git: Git,
 	source: ResolvedSource,
 	resolver: ConflictResolver | undefined,
+	fingerprint: string,
 ): Promise<void> {
 	const { branch, base, head, pullRequest } = outcome.contribution;
 	const baseline = await git.revParse("HEAD");
@@ -177,7 +207,10 @@ async function applyContribution(
 	}
 
 	await git.commitAll(
-		contributionMessage({ branch, base, head, pullRequest, source, resolution }),
+		contributionMessage({ branch, base, head, pullRequest, source, resolution, fingerprint }),
+		// Wall-clock time would make the same inputs produce a different commit
+		// every hour. The contribution head's date is stable and meaningful.
+		{ date: await git.commitDate(head) },
 	);
 }
 
@@ -205,6 +238,24 @@ async function resolveConflict(
 	return outcome.summary;
 }
 
+/** Stable hash of everything that can change the generated tree. */
+function inputFingerprint(sourceCommit: string, outcomes: ContributionOutcome[]): string {
+	const inputs = outcomes.map((outcome) =>
+		outcome.status === "apply"
+			? {
+					status: "apply",
+					branch: outcome.contribution.branch,
+					base: outcome.contribution.base,
+					head: outcome.contribution.head,
+				}
+			: { status: "skip", branch: outcome.branch, reason: outcome.reason },
+	);
+
+	return `sha256:${createHash("sha256")
+		.update(JSON.stringify({ format: 1, sourceCommit, inputs }))
+		.digest("hex")}`;
+}
+
 /**
  * The commit message is the durable record.
  *
@@ -219,6 +270,7 @@ function contributionMessage(input: {
 	pullRequest: { number: number; title: string } | undefined;
 	source: ResolvedSource;
 	resolution: string | undefined;
+	fingerprint: string;
 }): string {
 	const title = input.pullRequest?.title ?? input.branch;
 	const lines = [`forkit: ${title}`, ""];
@@ -232,6 +284,7 @@ function contributionMessage(input: {
 		`Forkit-Source-Base: ${input.base}`,
 		`Forkit-Source-Head: ${input.head}`,
 		`Forkit-Applied-To: ${input.source.ref}`,
+		`Forkit-Input: ${input.fingerprint}`,
 	);
 	if (input.pullRequest) lines.push(`Forkit-Upstream-PR: #${input.pullRequest.number}`);
 	if (input.resolution) lines.push("Forkit-Resolved-By: ai");
