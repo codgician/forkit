@@ -34,12 +34,16 @@ export interface RepoReport {
  */
 export async function runRepository(config: RepoConfig, options: RunOptions): Promise<RepoReport> {
 	const github = new GitHub(options.token);
-	const snapshot = await github.snapshot(config.upstream.repository, config.fork);
+	const [snapshot, committer] = await Promise.all([
+		github.snapshot(config.upstream.repository, config.fork),
+		github.viewer(),
+	]);
 
 	const workspace = await Workspace.create({
 		forkRepository: config.fork,
 		upstreamRepository: config.upstream.repository,
 		token: options.token,
+		committer,
 	});
 
 	const report: RepoReport = { repository: config.fork, branches: [], failed: false };

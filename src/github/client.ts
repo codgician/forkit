@@ -82,6 +82,26 @@ export class GitHub {
 	}
 
 	/**
+	 * The identity the token authenticates as, for commit authorship.
+	 *
+	 * Derived rather than configured: a hardcoded name that does not match the
+	 * pushing account produces commits GitHub attributes to nobody, with no
+	 * avatar and no link. The `<id>+<login>@users.noreply.github.com` form is
+	 * what GitHub maps back to the account.
+	 */
+	async viewer(): Promise<{ name: string; email: string }> {
+		const data = await this.graphql<{ viewer: { login: string; databaseId: number } }>(
+			"query { viewer { login databaseId } }",
+			{},
+		);
+
+		return {
+			name: data.viewer.login,
+			email: `${data.viewer.databaseId}+${data.viewer.login}@users.noreply.github.com`,
+		};
+	}
+
+	/**
 	 * Fetch releases, tags, and the fork's own open pull requests in one request.
 	 *
 	 * Only the newest `historyDepth` releases and tags are retrieved. Release

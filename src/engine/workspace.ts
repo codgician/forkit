@@ -11,8 +11,18 @@ export interface WorkspaceOptions {
 	upstreamRepository: string;
 	/** Token used for the authenticated push URL. Reads stay anonymous. */
 	token?: string;
+	/**
+	 * Identity for the commits forkit authors. It must be the account the token
+	 * belongs to, or GitHub shows the commits as authored by nobody.
+	 */
+	committer: Committer;
 	/** Reuse an existing checkout instead of cloning. */
 	directory?: string;
+}
+
+export interface Committer {
+	name: string;
+	email: string;
 }
 
 /**
@@ -42,8 +52,8 @@ export class Workspace {
 		);
 
 		// Identity for the synthetic commits forkit authors.
-		await git.git(["config", "user.name", "forkit"]);
-		await git.git(["config", "user.email", "forkit@users.noreply.github.com"]);
+		await git.git(["config", "user.name", options.committer.name]);
+		await git.git(["config", "user.email", options.committer.email]);
 		await git.git(["config", "commit.gpgsign", "false"]);
 		// Deterministic conflict markers, and diff3 gives the resolver the merge
 		// base as well as both sides.
