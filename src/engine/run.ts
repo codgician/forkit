@@ -58,7 +58,7 @@ export async function runRepository(config: RepoConfig, options: RunOptions): Pr
 			`+refs/heads/${config.upstream.branch}:refs/remotes/upstream/${config.upstream.branch}`,
 		]);
 
-		if (config.maintainPullRequestBranches) {
+		if (config.pullRequestMaintenance.enabled) {
 			report.maintenance = await maintainPullRequestBranches(config, git, snapshot, options.resolver);
 
 			for (const result of report.maintenance) {

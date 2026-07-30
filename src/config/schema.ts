@@ -48,6 +48,15 @@ const Track = z.union([TrackByBranch, TrackByReleases, TrackByTags]);
 
 const Container = z.object({ image: z.string().min(1) }).strict();
 
+/**
+ * Conflict policy is declared per context, not per repository.
+ *
+ * Resolving a conflict on a generated branch is private; resolving one on a
+ * branch backing an open pull request force-pushes into a maintainer's review.
+ * Those deserve separate decisions, so each context opts in on its own.
+ */
+const OnConflict = z.enum(["ai", "fail"]).default("fail");
+
 const BranchRule = z
 	.object({
 		track: Track,
@@ -57,6 +66,7 @@ const BranchRule = z
 			.refine((list) => new Set(list).size === list.length, {
 				message: "lists the same branch more than once",
 			}),
+		on_conflict: OnConflict,
 		container: Container.optional(),
 	})
 	.strict()
@@ -65,12 +75,16 @@ const BranchRule = z
 		path: ["contributions"],
 	});
 
+const PullRequestMaintenance = z
+	.object({ enabled: z.boolean().default(true), on_conflict: OnConflict })
+	.strict()
+	.default({ enabled: true, on_conflict: "fail" });
+
 export const RepoConfigFile = z
 	.object({
 		fork: RepoSlug,
 		upstream: z.object({ repository: RepoSlug, branch: z.string().min(1) }).strict(),
-		maintain_pull_request_branches: z.boolean().default(true),
-		on_conflict: z.enum(["ai", "fail"]).default("ai"),
+		maintain_pull_request_branches: PullRequestMaintenance,
 		branches: z.record(z.string().min(1), BranchRule),
 	})
 	.strict()

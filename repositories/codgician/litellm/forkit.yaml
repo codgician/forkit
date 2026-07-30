@@ -11,10 +11,11 @@ upstream:
   # merge-base, and it is what upstream PRs base on.
   branch: litellm_internal_staging
 
-# Keep every fork branch backing an open upstream PR merged with its PR base.
-maintain_pull_request_branches: true
-
-on_conflict: ai
+maintain_pull_request_branches:
+  enabled: true
+  # These branches back open upstream pull requests, so a resolution here is
+  # force-pushed into a maintainer's review. Conflicts stop and report instead.
+  on_conflict: fail
 
 branches:
   main:
@@ -32,5 +33,8 @@ branches:
     contributions:
       - litellm_configurable_copilot_headers
       - litellm_update_github_copilot_models
+    # Generated branch: a resolution here is private to this fork, so the
+    # resolver is allowed to attempt one.
+    on_conflict: ai
     container:
       image: ghcr.io/codgician/litellm

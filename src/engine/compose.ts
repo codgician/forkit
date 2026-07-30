@@ -137,7 +137,7 @@ async function applyContribution(
 
 	let resolution: string | undefined;
 	if (conflict) {
-		if (config.onConflict === "fail" || !resolver) {
+		if (rule.onConflict === "fail" || !resolver) {
 			throw new ComposeError(
 				`Applying "${branch}" to ${source.ref} conflicts in: ${conflict.paths.join(", ")}`,
 				rule.name,

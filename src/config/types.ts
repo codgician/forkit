@@ -20,6 +20,8 @@ export interface BranchRule {
 	 * source. Empty for mirror branches.
 	 */
 	contributions: string[];
+	/** What to do when applying a contribution conflicts. */
+	onConflict: ConflictPolicy;
 	/** Full registry path, e.g. ghcr.io/codgician/litellm. Absent means never build. */
 	image?: string;
 }
@@ -35,8 +37,15 @@ export interface RepoConfig {
 		 */
 		branch: string;
 	};
-	maintainPullRequestBranches: boolean;
-	onConflict: ConflictPolicy;
+	pullRequestMaintenance: {
+		enabled: boolean;
+		/**
+		 * Applies to branches with open upstream pull requests. Resolving here
+		 * force-pushes into a maintainer's review, so it is separate from the
+		 * policy for generated branches.
+		 */
+		onConflict: ConflictPolicy;
+	};
 	branches: BranchRule[];
 	/** Absolute path to the directory holding this forkit.yaml. */
 	configDir: string;

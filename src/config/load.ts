@@ -60,6 +60,7 @@ export async function loadConfig(configPath: string): Promise<RepoConfig> {
 		name,
 		track: resolveTrack(rule.track, file.upstream.branch),
 		contributions: rule.contributions,
+		onConflict: rule.on_conflict,
 		...(rule.container ? { image: rule.container.image } : {}),
 	}));
 
@@ -68,8 +69,10 @@ export async function loadConfig(configPath: string): Promise<RepoConfig> {
 	return {
 		fork: file.fork,
 		upstream: file.upstream,
-		maintainPullRequestBranches: file.maintain_pull_request_branches,
-		onConflict: file.on_conflict,
+		pullRequestMaintenance: {
+			enabled: file.maintain_pull_request_branches.enabled,
+			onConflict: file.maintain_pull_request_branches.on_conflict,
+		},
 		branches,
 		configDir: dirname(resolve(configPath)),
 	};

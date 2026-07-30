@@ -81,7 +81,7 @@ async function maintainOne(
 			};
 		}
 
-		if (config.onConflict === "fail" || !resolver) {
+		if (config.pullRequestMaintenance.onConflict === "fail" || !resolver) {
 			await git.git(["merge", "--abort"], { check: false });
 			return { ...base, status: "failed", detail: `conflicts in: ${conflict.paths.join(", ")}` };
 		}

@@ -15,8 +15,9 @@ upstream:
   repository: BerriAI/litellm
   branch: litellm_internal_staging
 
-maintain_pull_request_branches: true
-on_conflict: ai
+maintain_pull_request_branches:
+  enabled: true
+  on_conflict: fail
 
 branches:
   main:
@@ -31,6 +32,7 @@ branches:
     contributions:
       - litellm_configurable_copilot_headers
       - litellm_update_github_copilot_models
+    on_conflict: ai
     container:
       image: ghcr.io/codgician/litellm
 ```
@@ -75,6 +77,14 @@ limit.
 
 When git reports a genuine conflict — and only then — `on_conflict: ai` hands
 the worktree to a resolver built on the pi SDK.
+
+The policy is declared per context and defaults to `fail`, because the two
+contexts carry different risk:
+
+| Context | Effect of a resolution |
+| --- | --- |
+| A generated branch such as `my` | private to your fork |
+| A branch backing an open pull request | force-pushed into a maintainer's review |
 
 It runs with `read`, `grep`, `ls`, and `edit`. `bash` and `write` are withheld:
 the checkout has push-capable remotes, and resolving a conflict needs neither.
