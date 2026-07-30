@@ -46,7 +46,26 @@ const TrackByTags = z
  */
 const Track = z.union([TrackByBranch, TrackByReleases, TrackByTags]);
 
-const Container = z.object({ image: z.string().min(1) }).strict();
+const Container = z
+	.object({
+		image: z.string().min(1),
+		/** Dockerfile path relative to the composed worktree. */
+		dockerfile: z.string().min(1).default("Dockerfile"),
+		/**
+		 * Command proving the built image runs, as argv. Executed directly, so
+		 * there is no shell for a branch or tag name to escape into.
+		 *
+		 * Absent means the image is published on a successful build alone.
+		 */
+		smoke: z
+			.object({
+				entrypoint: z.string().min(1).optional(),
+				command: z.array(z.string()).min(1),
+			})
+			.strict()
+			.optional(),
+	})
+	.strict();
 
 /**
  * What to do when applying a contribution conflicts.

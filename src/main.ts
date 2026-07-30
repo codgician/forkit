@@ -1,30 +1,51 @@
 import { mkdir } from "node:fs/promises";
 import { AiConflictResolver } from "./ai/resolver.ts";
 import { discoverConfigFiles, loadConfig } from "./config/load.ts";
+import type { RepoConfig } from "./config/types.ts";
 import type { ConflictResolver } from "./engine/compose.ts";
 import { type RepoReport, runRepository } from "./engine/run.ts";
 
 /**
  * Entry point for the manage workflow.
  *
- * Discovers every managed repository, runs each, and exits non-zero if any
- * failed. Repositories are independent: one failing must not prevent the others
- * from being updated.
+ * `--list` prints the discovered forks as JSON for a job matrix; otherwise the
+ * named fork is run, or every one of them if none is named.
  */
 async function main(): Promise<number> {
-	const dryRun = process.env.FORKIT_DRY_RUN === "1";
+	const configPaths = await discoverConfigFiles(".");
+	if (configPaths.length === 0) {
+		console.error("No repositories/<owner>/<repo>/forkit.yaml found");
+		return 1;
+	}
+
+	const args = process.argv.slice(2);
+	const only = args.find((arg) => !arg.startsWith("--"));
+
+	// Loading every config first means a typo in one fails the whole run before
+	// any other fork is touched, rather than midway through.
+	const configs: RepoConfig[] = [];
+	for (const configPath of configPaths) {
+		configs.push(await loadConfig(configPath));
+	}
+
+	const selected = only ? configs.filter((config) => config.fork === only) : configs;
+	if (only && selected.length === 0) {
+		console.error(`No managed repository named "${only}"`);
+		return 1;
+	}
+
+	if (args.includes("--list")) {
+		console.log(JSON.stringify(selected.map((config) => config.fork)));
+		return 0;
+	}
+
 	const token = process.env.GITHUB_TOKEN;
 	if (!token) {
 		console.error("GITHUB_TOKEN is required");
 		return 1;
 	}
 
-	const only = process.argv[2];
-	const configPaths = await discoverConfigFiles(".");
-	if (configPaths.length === 0) {
-		console.error("No repositories/<owner>/<repo>/forkit.yaml found");
-		return 1;
-	}
+	const dryRun = process.env.FORKIT_DRY_RUN === "1";
 
 	// Without a key, conflicts fail the branch rather than silently going
 	// unresolved; the engine treats a missing resolver as `on_conflict: fail`.
@@ -40,10 +61,7 @@ async function main(): Promise<number> {
 
 	const reports: RepoReport[] = [];
 
-	for (const configPath of configPaths) {
-		const config = await loadConfig(configPath);
-		if (only && config.fork !== only) continue;
-
+	for (const config of selected) {
 		console.log(`\n=== ${config.fork} ===`);
 		try {
 			const report = await runRepository(config, {
@@ -79,9 +97,7 @@ async function writeSummary(reports: RepoReport[], dryRun: boolean): Promise<voi
 	const lines = [`# forkit${dryRun ? " (dry run)" : ""}`, ""];
 
 	for (const report of reports) {
-		lines.push(`## ${report.repository}`, "");
-
-		lines.push("| branch | status | detail |", "| --- | --- | --- |");
+		lines.push(`## ${report.repository}`, "", "| branch | status | detail |", "| --- | --- | --- |");
 		for (const branch of report.branches) {
 			lines.push(`| \`${branch.branch}\` | ${branch.status} | ${branch.detail} |`);
 		}
@@ -93,7 +109,9 @@ async function writeSummary(reports: RepoReport[], dryRun: boolean): Promise<voi
 		lines.push("");
 	}
 
-	await Bun.write(path, lines.join("\n"));
+	// Appended, not overwritten: matrix jobs share one summary.
+	const existing = (await Bun.file(path).text().catch(() => "")) || "";
+	await Bun.write(path, existing + lines.join("\n"));
 }
 
 process.exit(await main());

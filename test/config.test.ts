@@ -29,7 +29,7 @@ describe("loadConfig", () => {
 		const main = config.branches.find((b) => b.name === "main");
 		// Must be upstream's own main, not the development branch.
 		expect(main?.track).toEqual({ kind: "branch", branch: "main" });
-		expect(main?.image).toBeUndefined();
+		expect(main?.container).toBeUndefined();
 
 		const my = config.branches.find((b) => b.name === "my");
 		expect(my?.track).toMatchObject({ kind: "releases", prerelease: "exclude" });
@@ -37,7 +37,9 @@ describe("loadConfig", () => {
 			"litellm_configurable_copilot_headers",
 			"litellm_update_github_copilot_models",
 		]);
-		expect(my?.image).toBe("ghcr.io/codgician/litellm");
+		expect(my?.container?.image).toBe("ghcr.io/codgician/litellm");
+		expect(my?.container?.dockerfile).toBe("Dockerfile");
+		expect(my?.container?.smoke?.entrypoint).toBe("litellm");
 		// Generated branch: a resolution stays private to the fork.
 		expect(my?.onConflict).toBe("ai");
 		// A mirror never composes, so it never resolves anything.

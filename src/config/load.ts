@@ -61,7 +61,7 @@ export async function loadConfig(configPath: string): Promise<RepoConfig> {
 		track: resolveTrack(rule.track, file.upstream.branch),
 		contributions: rule.contributions,
 		onConflict: rule.on_conflict,
-		...(rule.container ? { image: rule.container.image } : {}),
+		...(rule.container ? { container: rule.container } : {}),
 	}));
 
 	assertNoTagCollision(branches, configPath);
@@ -100,9 +100,9 @@ function assertNoTagCollision(branches: BranchRule[], configPath: string): void 
 	const claimedBy = new Map<string, string>();
 
 	for (const branch of branches) {
-		if (!branch.image) continue;
+		if (!branch.container) continue;
 
-		const tag = `${branch.image}:${toOciTag(branch.name)}`;
+		const tag = `${branch.container.image}:${toOciTag(branch.name)}`;
 		const existing = claimedBy.get(tag);
 		if (existing) {
 			throw new ConfigError(

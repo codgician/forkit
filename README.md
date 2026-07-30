@@ -132,4 +132,21 @@ GITHUB_TOKEN=$(gh auth token) FORKIT_DRY_RUN=1 bun run src/main.ts
 ## Adding a fork
 
 Add `repositories/<owner>/<repo>/forkit.yaml`. Repositories are discovered by
-glob; there is no central registry.
+glob; there is no central registry, and nothing else needs editing.
+
+Each fork gets its own runner, so a slow container build in one does not delay
+another, and a failure in one does not cancel the rest. Runs are serialised per
+fork rather than globally: two runs of the same fork would race on its branches
+and tags, while different forks never touch the same refs.
+
+Anything a project needs beyond git is declared in its own file — which
+Dockerfile to build, and the command that proves the image runs:
+
+```yaml
+    container:
+      image: ghcr.io/codgician/litellm
+      dockerfile: Dockerfile
+      smoke:
+        entrypoint: litellm
+        command: ["--version"]
+```

@@ -103,9 +103,9 @@ async function runBranch(
 		// Built and smoke-tested before the branch moves, so a branch never points
 		// at a tree that failed to produce a working image.
 		let image: string | undefined;
-		if (rule.image) {
+		if (rule.container) {
 			const published = await publishContainer(composed, {
-				image: rule.image,
+				container: rule.container,
 				worktree: workspace.git.cwd,
 				sourceRepository: options.sourceRepository,
 				dryRun: options.dryRun,

@@ -22,8 +22,17 @@ export interface BranchRule {
 	contributions: string[];
 	/** What to do when applying a contribution conflicts. */
 	onConflict: ConflictPolicy;
-	/** Full registry path, e.g. ghcr.io/codgician/litellm. Absent means never build. */
-	image?: string;
+	/** Absent means this branch is never built. */
+	container?: ContainerSpec;
+}
+
+export interface ContainerSpec {
+	/** Full registry path, e.g. ghcr.io/codgician/litellm. */
+	image: string;
+	/** Dockerfile path relative to the composed worktree. */
+	dockerfile: string;
+	/** Proves the built image runs. Absent means a successful build suffices. */
+	smoke?: { entrypoint?: string; command: string[] };
 }
 
 export interface RepoConfig {

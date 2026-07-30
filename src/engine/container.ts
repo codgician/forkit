@@ -1,9 +1,10 @@
+import type { ContainerSpec } from "../config/types.ts";
 import { toOciTag } from "../config/types.ts";
 import { run } from "../util/exec.ts";
 import type { ComposedBranch } from "./compose.ts";
 
 export interface PublishOptions {
-	image: string;
+	container: ContainerSpec;
 	worktree: string;
 	/** Repository that owns the workflow, for the source label. */
 	sourceRepository: string;
@@ -29,46 +30,48 @@ export async function publishContainer(
 	composed: ComposedBranch,
 	options: PublishOptions,
 ): Promise<PublishResult> {
-	const branchTag = toOciTag(composed.branch);
-	const immutable = `${options.image}:${toOciTag(`${composed.source.ref}-${composed.branch}.${composed.commit.slice(0, 8)}`)}`;
-	const moving = `${options.image}:${branchTag}`;
+	const { container } = options;
+	const immutable = `${container.image}:${toOciTag(
+		`${composed.source.ref}-${composed.branch}.${composed.commit.slice(0, 8)}`,
+	)}`;
+	const moving = `${container.image}:${toOciTag(composed.branch)}`;
 
-	await run([
-		"docker",
-		"build",
-		"--tag",
-		immutable,
-		"--tag",
-		moving,
-		// Links the package to the publishing repository, which is what grants
-		// GITHUB_TOKEN permission to push to it.
-		"--label",
-		`org.opencontainers.image.source=https://github.com/${options.sourceRepository}`,
-		"--label",
-		`org.opencontainers.image.revision=${composed.commit}`,
-		"--label",
-		`org.opencontainers.image.version=${composed.source.ref}`,
-		"--label",
-		`forkit.contributions=${composed.applied.join(",")}`,
-		"--file",
-		"Dockerfile",
-		options.worktree,
-	], { cwd: options.worktree, timeoutMs: 60 * 60_000 });
+	await run(
+		[
+			"docker",
+			"build",
+			"--tag",
+			immutable,
+			"--tag",
+			moving,
+			// Links the package to the publishing repository, which is what grants
+			// GITHUB_TOKEN permission to push to it.
+			"--label",
+			`org.opencontainers.image.source=https://github.com/${options.sourceRepository}`,
+			"--label",
+			`org.opencontainers.image.revision=${composed.commit}`,
+			"--label",
+			`org.opencontainers.image.version=${composed.source.ref}`,
+			"--label",
+			`forkit.contributions=${composed.applied.join(",")}`,
+			"--file",
+			container.dockerfile,
+			options.worktree,
+		],
+		{ cwd: options.worktree, timeoutMs: 60 * 60_000 },
+	);
 
-	await smokeTest(immutable);
+	await smokeTest(immutable, container.smoke);
 
 	if (options.dryRun) return { immutable, moving, digest: undefined };
 
 	await run(["docker", "push", immutable]);
 	await run(["docker", "push", moving]);
 
-	const inspected = await run([
-		"docker",
-		"inspect",
-		"--format",
-		"{{index .RepoDigests 0}}",
-		immutable,
-	], { check: false });
+	const inspected = await run(
+		["docker", "inspect", "--format", "{{index .RepoDigests 0}}", immutable],
+		{ check: false },
+	);
 
 	return {
 		immutable,
@@ -78,17 +81,27 @@ export async function publishContainer(
 }
 
 /**
- * Confirm the image starts.
+ * Confirm the image runs.
  *
- * Deliberately minimal for now: it catches a build that produces an unusable
- * entrypoint or an import error from a bad resolution, which is the failure a
- * conflict is most likely to cause. It does not exercise the database.
+ * The command is per repository because only the project knows what proves its
+ * image works. A build alone catches a broken Dockerfile; this catches an image
+ * that builds but cannot start, which is what a bad conflict resolution most
+ * often produces.
  */
-async function smokeTest(image: string): Promise<void> {
-	const result = await run(["docker", "run", "--rm", "--entrypoint", "litellm", image, "--version"], {
-		check: false,
-		timeoutMs: 5 * 60_000,
-	});
+async function smokeTest(image: string, smoke: ContainerSpec["smoke"]): Promise<void> {
+	if (!smoke) return;
+
+	const result = await run(
+		[
+			"docker",
+			"run",
+			"--rm",
+			...(smoke.entrypoint ? ["--entrypoint", smoke.entrypoint] : []),
+			image,
+			...smoke.command,
+		],
+		{ check: false, timeoutMs: 5 * 60_000 },
+	);
 
 	if (result.code !== 0) {
 		const detail = (result.stderr.trim() || result.stdout.trim()).split("\n").slice(-15).join("\n");
