@@ -54,7 +54,7 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.discover.outputs.repositories) }}
       fail-fast: false
-    uses: ./.github/workflows/manage-repository.yml
+    uses: ./.github/workflows/_manage-repository.yml
     with:
       repository: ${{ matrix.repository }}
       artifact: ${{ matrix.artifact }}
