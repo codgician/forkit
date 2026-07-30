@@ -5,6 +5,8 @@ on:
     # Hourly, off the top of the hour: scheduled runs are delayed most when
     # every repository on GitHub asks at :00.
     - cron: "23 * * * *"
+  # Pushes verify the engine without writing: a code change should not publish
+  # before it has been seen working.
   push:
     branches: [main]
     paths:
@@ -39,6 +41,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # GITHUB_TOKEN is scoped to this repository, so it cannot push to a
+      # managed fork. The App installation can.
+      - name: Mint an installation token
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.FORKIT_APP_ID }}
+          private-key: ${{ secrets.FORKIT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Check required secrets
+        env:
+          DENDRO_API_KEY: ${{ secrets.DENDRO_API_KEY }}
+          TRAJECTORY_ZIP_PASSWD: ${{ secrets.TRAJECTORY_ZIP_PASSWD }}
+        run: |
+          missing=""
+          [ -n "$DENDRO_API_KEY" ] || missing="$missing DENDRO_API_KEY"
+          [ -n "$TRAJECTORY_ZIP_PASSWD" ] || missing="$missing TRAJECTORY_ZIP_PASSWD"
+          if [ -n "$missing" ]; then
+            echo "::warning::unset secrets:$missing (conflicts will fail; trajectories will not be encrypted)"
+          fi
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.14"
@@ -64,11 +88,14 @@ jobs:
 
       - name: Run forkit
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The App token, not GITHUB_TOKEN: pushes target the managed fork.
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DENDRO_API_KEY: ${{ secrets.DENDRO_API_KEY }}
           TRAJECTORY_ZIP_PASSWD: ${{ secrets.TRAJECTORY_ZIP_PASSWD }}
-          FORKIT_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          # A push verifies the engine; only a deliberate dispatch or the
+          # schedule may write.
+          FORKIT_DRY_RUN: ${{ (github.event_name == 'push' || inputs.dry_run) && '1' || '0' }}
         run: bun run src/main.ts ${{ inputs.repository }}
 
       # Encrypted, and uploaded on failure too: a resolution that worked needs
