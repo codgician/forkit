@@ -1,4 +1,7 @@
+import { mkdir } from "node:fs/promises";
+import { AiConflictResolver } from "./ai/resolver.ts";
 import { discoverConfigFiles, loadConfig } from "./config/load.ts";
+import type { ConflictResolver } from "./engine/compose.ts";
 import { type RepoReport, runRepository } from "./engine/run.ts";
 
 /**
@@ -23,6 +26,18 @@ async function main(): Promise<number> {
 		return 1;
 	}
 
+	// Without a key, conflicts fail the branch rather than silently going
+	// unresolved; the engine treats a missing resolver as `on_conflict: fail`.
+	const dendroKey = process.env.DENDRO_API_KEY;
+	let resolver: ConflictResolver | undefined;
+	if (dendroKey) {
+		const trajectoryDirectory = process.env.FORKIT_TRAJECTORY_DIR ?? "trajectory";
+		await mkdir(trajectoryDirectory, { recursive: true });
+		resolver = new AiConflictResolver({ apiKey: dendroKey, trajectoryDirectory });
+	} else {
+		console.warn("DENDRO_API_KEY is unset: conflicts will fail instead of being resolved");
+	}
+
 	const reports: RepoReport[] = [];
 
 	for (const configPath of configPaths) {
@@ -35,6 +50,7 @@ async function main(): Promise<number> {
 				token,
 				sourceRepository: process.env.GITHUB_REPOSITORY ?? "codgician/forkit",
 				dryRun,
+				...(resolver ? { resolver } : {}),
 			});
 			reports.push(report);
 			printReport(report);
