@@ -1,0 +1,11 @@
+name: probe-arm
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - run: |
+          echo "arch: $(uname -m)"
+          echo "cpus: $(nproc)"
+          free -g | head -2
+          df -h / | tail -1
