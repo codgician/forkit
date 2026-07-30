@@ -1,0 +1,21 @@
+{
+  "name": "forkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Declarative fork maintenance: track upstream releases, apply your own contributions, publish containers.",
+  "scripts": {
+    "manage": "bun run src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.73.1",
+    "@mariozechner/pi-coding-agent": "^0.73.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

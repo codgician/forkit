@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.DS_Store
+
+# Local run scratch
+.forkit-work/
+trajectory/
+*.7z

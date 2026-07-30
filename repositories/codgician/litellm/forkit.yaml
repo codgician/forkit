@@ -1,0 +1,36 @@
+# Forkit configuration for codgician/litellm.
+#
+# main  mirrors upstream's own main branch, unpatched, never built.
+# my    tracks the newest stable release and carries the contributions below.
+
+fork: codgician/litellm
+
+upstream:
+  repository: BerriAI/litellm
+  # Development branch. Contributions without an open PR use it as their
+  # merge-base, and it is what upstream PRs base on.
+  branch: litellm_internal_staging
+
+# Keep every fork branch backing an open upstream PR merged with its PR base.
+maintain_pull_request_branches: true
+
+on_conflict: ai
+
+branches:
+  main:
+    track:
+      # Upstream's main, not litellm_internal_staging: this fork's main was
+      # created from it, and repointing would replace its lineage.
+      branch: main
+
+  my:
+    track:
+      releases:
+        prerelease: false
+        # Stable releases carry no suffix; -rc.N and -dev.N are prereleases.
+        match: '^v[0-9]+\.[0-9]+\.[0-9]+$'
+    contributions:
+      - litellm_configurable_copilot_headers
+      - litellm_update_github_copilot_models
+    container:
+      image: ghcr.io/codgician/litellm
