@@ -9,6 +9,7 @@ import {
 import type { ConflictResolver, ResolverContext, ResolverOutcome } from "../engine/compose.ts";
 import { DENDRO_PROVIDER, dendroModel } from "./model.ts";
 import { SYSTEM_PROMPT, buildPrompt } from "./prompt.ts";
+import { createResolverToolPolicy } from "./tool-policy.ts";
 import { Trajectory } from "./trajectory.ts";
 
 export interface AiResolverOptions {
@@ -59,6 +60,12 @@ export class AiConflictResolver implements ConflictResolver {
 			// discovered; every resource kind is disabled anyway.
 			agentDir: `${context.git.cwd}/.forkit-agent`,
 			systemPrompt: SYSTEM_PROMPT,
+			extensionFactories: [
+				createResolverToolPolicy({
+					root: context.git.cwd,
+					conflictedPaths: context.conflict.paths,
+				}),
+			],
 			noExtensions: true,
 			noSkills: true,
 			noPromptTemplates: true,
@@ -73,8 +80,8 @@ export class AiConflictResolver implements ConflictResolver {
 			thinkingLevel,
 			authStorage,
 			modelRegistry,
-			// Allowlist of tool names. Withholding bash and write is the main
-			// containment boundary for an agent in a repository with remotes.
+			// The name allowlist removes execution tools; the inline policy above
+			// confines filesystem parameters to the worktree and conflicted edits.
 			tools: ["read", "grep", "ls", "edit"],
 			resourceLoader,
 			sessionManager: SessionManager.inMemory(),
