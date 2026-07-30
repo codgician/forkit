@@ -64,7 +64,7 @@ jobs:
   # A native runner per architecture, all on Ubuntu 24.04. No QEMU.
   build:
     needs: compose
-    if: needs.compose.outputs.changed == 'true'
+    if: needs.compose.outputs.changed == 'true' && needs.compose.outputs.builds != '[]'
     strategy:
       matrix:
         include: ${{ fromJson(needs.compose.outputs.builds) }}
