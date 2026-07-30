@@ -69,10 +69,6 @@ export async function loadConfig(configPath: string): Promise<RepoConfig> {
 	return {
 		fork: file.fork,
 		upstream: file.upstream,
-		pullRequestMaintenance: {
-			enabled: file.maintain_pull_request_branches.enabled,
-			onConflict: file.maintain_pull_request_branches.on_conflict,
-		},
 		branches,
 		configDir: dirname(resolve(configPath)),
 	};

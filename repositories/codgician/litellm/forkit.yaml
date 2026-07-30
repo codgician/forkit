@@ -11,12 +11,6 @@ upstream:
   # merge-base, and it is what upstream PRs base on.
   branch: litellm_internal_staging
 
-maintain_pull_request_branches:
-  enabled: true
-  # These branches back open upstream pull requests, so a resolution here is
-  # force-pushed into a maintainer's review. Conflicts stop and report instead.
-  on_conflict: fail
-
 branches:
   main:
     track:

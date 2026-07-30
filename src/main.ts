@@ -56,7 +56,7 @@ async function main(): Promise<number> {
 			printReport(report);
 		} catch (error) {
 			console.error(`  fatal: ${(error as Error).message}`);
-			reports.push({ repository: config.fork, maintenance: [], branches: [], failed: true });
+			reports.push({ repository: config.fork, branches: [], failed: true });
 		}
 	}
 
@@ -65,9 +65,6 @@ async function main(): Promise<number> {
 }
 
 function printReport(report: RepoReport): void {
-	for (const result of report.maintenance) {
-		console.log(`  pr #${result.pullRequest} ${result.branch}: ${result.status} — ${result.detail}`);
-	}
 	for (const branch of report.branches) {
 		console.log(`  branch ${branch.branch}: ${branch.status} — ${branch.detail}`);
 		if (branch.image) console.log(`    image ${branch.image}`);
@@ -83,14 +80,6 @@ async function writeSummary(reports: RepoReport[], dryRun: boolean): Promise<voi
 
 	for (const report of reports) {
 		lines.push(`## ${report.repository}`, "");
-
-		if (report.maintenance.length > 0) {
-			lines.push("| pull request | branch | status |", "| --- | --- | --- |");
-			for (const result of report.maintenance) {
-				lines.push(`| #${result.pullRequest} | \`${result.branch}\` | ${result.status} |`);
-			}
-			lines.push("");
-		}
 
 		lines.push("| branch | status | detail |", "| --- | --- | --- |");
 		for (const branch of report.branches) {

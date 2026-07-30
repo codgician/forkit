@@ -15,10 +15,6 @@ upstream:
   repository: BerriAI/litellm
   branch: litellm_internal_staging
 
-maintain_pull_request_branches:
-  enabled: true
-  on_conflict: fail
-
 branches:
   main:
     track:
@@ -43,7 +39,6 @@ Every hour that produces:
 - `my` rebuilt from the newest stable release with both contributions applied.
 - `ghcr.io/codgician/litellm:my` plus an immutable
   `ghcr.io/codgician/litellm:v1.94.0-my.<sha>`.
-- Each branch backing an open upstream pull request merged with its base.
 
 ## Design
 
@@ -60,8 +55,9 @@ publishing nothing.
 merged *and* the tracked release contains that merge. Dropping at merge time
 would lose the change for the weeks until the next release.
 
-**Pull request branches are merged, never rebased.** Rewriting them would
-force-push over commits a maintainer may be reviewing.
+**Forkit never writes to your contribution branches.** It reads them. Keeping
+an open pull request current is a judgement call about someone else's review,
+which belongs to you, not to an hourly job.
 
 **Every push is lease-protected** against the tip observed at the start of a run.
 
@@ -78,13 +74,9 @@ limit.
 When git reports a genuine conflict — and only then — `on_conflict: ai` hands
 the worktree to a resolver built on the pi SDK.
 
-The policy is declared per context and defaults to `fail`, because the two
-contexts carry different risk:
-
-| Context | Effect of a resolution |
-| --- | --- |
-| A generated branch such as `my` | private to your fork |
-| A branch backing an open pull request | force-pushed into a maintainer's review |
+Declared per branch and defaulting to `fail`, so a branch opts in rather than
+inheriting it. Resolutions land only on generated branches, never on anything
+attached to an upstream review.
 
 It runs with `read`, `grep`, `ls`, and `edit`. `bash` and `write` are withheld:
 the checkout has push-capable remotes, and resolving a conflict needs neither.

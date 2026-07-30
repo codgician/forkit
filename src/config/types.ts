@@ -37,15 +37,6 @@ export interface RepoConfig {
 		 */
 		branch: string;
 	};
-	pullRequestMaintenance: {
-		enabled: boolean;
-		/**
-		 * Applies to branches with open upstream pull requests. Resolving here
-		 * force-pushes into a maintainer's review, so it is separate from the
-		 * policy for generated branches.
-		 */
-		onConflict: ConflictPolicy;
-	};
 	branches: BranchRule[];
 	/** Absolute path to the directory holding this forkit.yaml. */
 	configDir: string;

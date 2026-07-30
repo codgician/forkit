@@ -25,9 +25,6 @@ describe("loadConfig", () => {
 
 		expect(config.fork).toBe("codgician/litellm");
 		expect(config.upstream.branch).toBe("litellm_internal_staging");
-		expect(config.pullRequestMaintenance.enabled).toBe(true);
-		// Resolutions here would be force-pushed into a maintainer's review.
-		expect(config.pullRequestMaintenance.onConflict).toBe("fail");
 
 		const main = config.branches.find((b) => b.name === "main");
 		// Must be upstream's own main, not the development branch.
@@ -47,13 +44,11 @@ describe("loadConfig", () => {
 		expect(main?.onConflict).toBe("fail");
 	});
 
-	test("conflict policy defaults to fail in every context", async () => {
+	test("conflict policy defaults to fail", async () => {
 		const path = await writeConfig(`${BASE}  my:\n    track:\n      releases: {}\n`);
 		const config = await loadConfig(path);
 
 		expect(config.branches[0]?.onConflict).toBe("fail");
-		expect(config.pullRequestMaintenance.onConflict).toBe("fail");
-		expect(config.pullRequestMaintenance.enabled).toBe(true);
 	});
 
 	test("`branch: upstream` is shorthand for the development branch", async () => {
