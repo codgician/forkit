@@ -58,5 +58,5 @@ jobs:
     with:
       repository: ${{ matrix.repository }}
       artifact: ${{ matrix.artifact }}
-      dry_run: ${{ github.event_name == 'push' || inputs.dry_run }}
+      dry_run: ${{ github.event_name == 'push' || inputs.dry_run == true }}
     secrets: inherit
