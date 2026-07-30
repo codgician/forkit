@@ -1,12 +1,14 @@
 # forkit
 
-Declarative fork maintenance. Tracks upstream releases, applies your own
-contributions on top, and publishes containers — without hand-maintaining a
-patch stack.
+Declarative maintenance for downstream forks. Forkit tracks an upstream branch,
+tag, or release; reapplies selected contribution branches; advances generated
+fork branches; and optionally publishes multi-architecture containers.
 
-## What it does
+## Configuration
 
-For each managed fork, `forkit.yaml` declares what every branch means:
+Each managed repository has one
+`repositories/<owner>/<repository>/forkit.yaml`. A target branch declares its
+source, ordered contributions, conflict policy, and optional container.
 
 ```yaml
 fork: codgician/litellm
@@ -16,10 +18,6 @@ upstream:
   branch: litellm_internal_staging
 
 branches:
-  main:
-    track:
-      branch: main
-
   my:
     track:
       releases:
@@ -31,102 +29,98 @@ branches:
     on_conflict: ai
     container:
       image: ghcr.io/codgician/litellm
+      platforms: [linux/amd64, linux/arm64]
+      smoke:
+        entrypoint: litellm
+        command: ["--version"]
 ```
 
-Every hour that produces:
+Tracking can select an upstream branch directly, the newest matching GitHub
+release, or the newest matching tag. Omitting `container` makes branch
+maintenance the only output:
 
-- `main` set to upstream's own `main`, unpatched, never built.
-- `my` rebuilt from the newest stable release with both contributions applied.
-- `ghcr.io/codgician/litellm:my` plus an immutable
-  `ghcr.io/codgician/litellm:v1.94.0-my.<sha>`.
+```yaml
+fork: codgician/proxmox-nixos
 
-## Design
+upstream:
+  repository: SaumonNet/proxmox-nixos
+  branch: main
 
-**Contributions apply as deltas, not merges.** A contribution branch is based on
-upstream development and usually carries unrelated commits. Merging it into a
-release would drag those along, so forkit applies only `base..head`, where
-`base` is the merge-base with the branch its pull request targets.
+branches:
+  my:
+    track:
+      branch: main
+    contributions: [nixos-26.05]
+    on_conflict: ai
+```
 
-**Composition is all-or-nothing.** A contribution that cannot be applied fails
-the branch. Publishing an image that silently lacks a patch is worse than
-publishing nothing.
+`upstream.branch` is the development base used when a contribution has no pull
+request. When a pull request exists, its actual base branch determines the
+delta.
 
-**Contributions are dropped only once upstream ships them** — the pull request
-merged *and* the tracked release contains that merge. Dropping at merge time
-would lose the change for the weeks until the next release.
+## Guarantees
 
-**Forkit never writes to your contribution branches.** It reads them. Keeping
-an open pull request current is a judgement call about someone else's review,
-which belongs to you, not to an hourly job.
+- **Contributions are deltas, not merges.** Forkit applies only `base..head`, so
+  unrelated commits carried by a contribution branch do not leak into the
+  generated branch.
+- **Composition is all-or-nothing.** A missing or conflicting contribution
+  fails the target instead of silently publishing an incomplete result.
+- **Merged contributions remain until shipped.** A contribution is skipped
+  only after its pull request is merged and the tracked source contains that
+  merge.
+- **Inputs are deterministic.** A fingerprint of the source and contribution
+  heads makes identical runs reuse the existing generated commit.
+- **Updates are race-safe.** Every branch push is protected by a lease against
+  the tip observed during composition.
+- **Versions do not regress by publication date.** Parseable release and tag
+  names are ordered semantically.
 
-**Every push is lease-protected** against the tip observed at the start of a run.
-
-**Releases are ordered by semantic version, not publication date.** GitHub
-returns releases newest-first by date, so a backport published after a newer
-line would otherwise downgrade a branch.
-
-**One GraphQL request per repository.** REST enumeration cost ~60 requests for a
-repository the size of litellm and silently missed pull requests beyond its page
-limit.
+Forkit reads contribution branches but never updates them.
 
 ## Conflict resolution
 
-When git reports a genuine conflict — and only then — `on_conflict: ai` hands
-the worktree to a resolver built on the pi SDK.
+`on_conflict` defaults to `fail`. Setting it to `ai` permits the pi-based
+resolver to repair genuine Git conflicts on the generated branch.
 
-Declared per branch and defaulting to `fail`, so a branch opts in rather than
-inheriting it. Resolutions land only on generated branches, never on anything
-attached to an upstream review.
+The resolver receives only `read`, `grep`, `ls`, and `edit`. Filesystem access
+is confined to the disposable worktree, Git metadata is blocked, and edits are
+limited to files Git reports as conflicted. A resolution is committed only if
+Git reports no unmerged entries, conflict markers, out-of-scope edits, or diff
+errors.
 
-It runs with `read`, `grep`, `ls`, and `edit`. `bash` and `write` are withheld:
-the checkout has push-capable remotes, and resolving a conflict needs neither.
+Generated commit messages carry durable source and input provenance. Resolver
+trajectories are encrypted before upload and are treated as debugging telemetry,
+not provenance.
 
-Any resolution must pass every gate before it is committed:
+## Workflow
 
-| Gate | Rejects |
-| --- | --- |
-| `unmerged-entries` | an index git still considers unmerged |
-| `conflict-markers` | leftover `<<<<<<<` / `=======` / `>>>>>>>` |
-| `out-of-scope-edits` | changes to files outside the conflicted set |
-| `diff-check` | whitespace damage |
+The scheduled workflow discovers every manifest and creates one isolated job
+graph per repository:
 
-The gates check the tree, never the model's account of what it did.
+1. **Compose** resolves sources and contributions once and bundles the exact
+   generated commits.
+2. **Build** runs only when a changed target declares a container. Each platform
+   uses a native Ubuntu runner; there is no QEMU.
+3. **Publish** advances generated branches and, when configured, combines native
+   image digests into one OCI manifest and runs the smoke command.
 
-A clean merge never invokes the model. Neither does a failing test, a failed
-build, or an API error.
+A failure in one repository does not cancel another. Publication is serialized
+per repository so concurrent runs cannot race its branches or tags. Push events
+exercise composition and builds in dry-run mode; scheduled and explicit runs
+may publish.
 
-## Records
+## Local development
 
-The durable record of a resolution is its commit message, which carries
-notification-free provenance trailers. Pull request numbers are deliberately
-excluded: pushing a generated commit must never create activity on an upstream
-review.
-
-```
-Forkit-Contribution: litellm_configurable_copilot_headers
-Forkit-Source-Base: 2f2e1e75...
-Forkit-Source-Head: 6bfcea21...
-Forkit-Applied-To: v1.94.0
-Forkit-Input: sha256:...
-```
-
-Resolver trajectories are development telemetry for tuning the harness, not
-provenance. They are encrypted with AES-256 and encrypted headers, uploaded as
-workflow artifacts, and never written to logs or the job summary — both are
-public on a public repository.
-
-## Running it
-
-Direnv enters the locked Nix development shell. Install the locked JavaScript
-dependencies once after entering it:
+Direnv loads the same locked Nix shell used by GitHub Actions. JavaScript and pi
+dependencies remain pinned by `bun.lock`.
 
 ```bash
 direnv allow
 bun install --frozen-lockfile
 ```
 
-Forkit's workflow operations are project-local pi commands. They work in an
-interactive pi session or headlessly, exactly as invoked by GitHub Actions:
+Workflow operations are project-local pi commands and can run interactively or
+headlessly:
 
 ```bash
 export FORKIT_REPOSITORY=codgician/litellm
@@ -138,49 +132,17 @@ pi --no-session -p /forkit-compose
 FORKIT_PLATFORM=linux/amd64 pi --no-session -p /forkit-build
 ```
 
-Compose writes `source/`; build reads it. Publish additionally reads `digests/`.
-Unset `FORKIT_DRY_RUN` before `/forkit-publish` to permit publication.
+`/forkit-publish` consumes `source/` and, for container targets, completed
+`digests/`; CI invokes it only after the required native builds.
 
 | Variable | Purpose |
 | --- | --- |
-| `FORKIT_REPOSITORY` | Managed `owner/repository`; required except when planning all repositories. |
-| `FORKIT_PLATFORM` | Required by `/forkit-build`, for example `linux/amd64`. |
-| `GITHUB_TOKEN` | Required by compose and publish for GitHub access. |
-| `DENDRO_API_KEY` | Resolver credential. Unset means conflicts fail. |
-| `TRAJECTORY_ZIP_PASSWD` | Encrypts trajectory archives. |
-| `FORKIT_DRY_RUN` | `1` to skip every push. |
+| `FORKIT_REPOSITORY` | Managed `owner/repository`; optional only when planning all repositories. |
+| `FORKIT_PLATFORM` | Platform required by `/forkit-build`. |
+| `GITHUB_TOKEN` | GitHub access for compose and publish. |
+| `DENDRO_API_KEY` | AI resolver credential; without it, conflicts fail. |
+| `TRAJECTORY_ZIP_PASSWD` | Password for encrypted resolver trajectories. |
+| `FORKIT_DRY_RUN` | `1` disables branch and registry publication. |
 
-## Adding a fork
-
-Add `repositories/<owner>/<repo>/forkit.yaml`. Repositories are discovered by
-glob; there is no central registry, and nothing else needs editing.
-
-Each fork gets an isolated workflow. Within it, compose runs exactly once and
-hands the resulting commit to one native runner per architecture. The final job
-combines their digests into a single OCI manifest before moving the branch.
-
-For the built-in platforms, both runners use Ubuntu 24.04:
-
-| platform | runner |
-| --- | --- |
-| `linux/amd64` | `ubuntu-24.04` |
-| `linux/arm64` | `ubuntu-24.04-arm` |
-
-There is no QEMU and no architecture in the image name. A client pulls the
-entry matching its own platform from the same tag.
-
-A failure in one fork does not cancel another. Runs are serialised per fork at
-publication, where two runs would otherwise race on its branches and tags.
-
-Anything a project needs beyond git is declared in its own file — platforms,
-Dockerfile, and the command that proves the image runs:
-
-```yaml
-    container:
-      image: ghcr.io/codgician/litellm
-      dockerfile: Dockerfile
-      platforms: [linux/amd64, linux/arm64]
-      smoke:
-        entrypoint: litellm
-        command: ["--version"]
-```
+To add a fork, add its manifest. Discovery is automatic; there is no central
+registry or workflow file to edit.
