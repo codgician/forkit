@@ -33,17 +33,13 @@ async function main(): Promise<number> {
 		return 0;
 	}
 
-	const token = process.env.GITHUB_TOKEN;
-	if (!token) {
-		console.error("GITHUB_TOKEN is required");
-		return 1;
-	}
 
 	const artifactDirectory = resolve(valueOf(args, "--artifact") ?? "forkit-artifact");
 	const platform = valueOf(args, "--platform");
 	const dryRun = process.env.FORKIT_DRY_RUN === "1";
 
 	if (args.includes("--compose")) {
+		const token = requiredToken();
 		const config = requireOne(selected, "compose");
 		const resolver = await createResolver(platform);
 		const artifact = await createRepositoryArtifact(config, token, resolver, artifactDirectory);
@@ -68,6 +64,7 @@ async function main(): Promise<number> {
 	}
 
 	if (args.includes("--publish")) {
+		const token = requiredToken();
 		const digests = await readDigests(valueOf(args, "--digests") ?? "digests");
 		const results = await publishRepositoryArtifact(artifactDirectory, digests, token, dryRun);
 		for (const result of results) {
@@ -94,6 +91,12 @@ function requireOne(configs: RepoConfig[], operation: string): RepoConfig {
 		throw new Error(`--${operation} requires exactly one --repository`);
 	}
 	return configs[0]!;
+}
+
+function requiredToken(): string {
+	const token = process.env.GITHUB_TOKEN;
+	if (!token) throw new Error("GITHUB_TOKEN is required for this operation");
+	return token;
 }
 
 function makePlan(configs: RepoConfig[]): {
