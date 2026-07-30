@@ -52,6 +52,16 @@ const Container = z
 		/** Dockerfile path relative to the composed worktree. */
 		dockerfile: z.string().min(1).default("Dockerfile"),
 		/**
+		 * Platforms to build, as an OCI manifest list under one tag.
+		 *
+		 * A tag must mean the same build everywhere, so an architecture never
+		 * appears in the image name. Clients select by their own platform.
+		 */
+		platforms: z
+			.array(z.string().regex(/^[a-z0-9]+\/[a-z0-9]+(\/v[0-9]+)?$/, "must look like linux/amd64"))
+			.min(1)
+			.default(["linux/amd64"]),
+		/**
 		 * Command proving the built image runs, as argv. Executed directly, so
 		 * there is no shell for a branch or tag name to escape into.
 		 *

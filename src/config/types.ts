@@ -31,6 +31,8 @@ export interface ContainerSpec {
 	image: string;
 	/** Dockerfile path relative to the composed worktree. */
 	dockerfile: string;
+	/** Built as one manifest list, so a tag never encodes an architecture. */
+	platforms: string[];
 	/** Proves the built image runs. Absent means a successful build suffices. */
 	smoke?: { entrypoint?: string; command: string[] };
 }

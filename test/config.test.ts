@@ -39,6 +39,8 @@ describe("loadConfig", () => {
 		]);
 		expect(my?.container?.image).toBe("ghcr.io/codgician/litellm");
 		expect(my?.container?.dockerfile).toBe("Dockerfile");
+		// One tag, both architectures.
+		expect(my?.container?.platforms).toEqual(["linux/amd64", "linux/arm64"]);
 		expect(my?.container?.smoke?.entrypoint).toBe("litellm");
 		// Generated branch: a resolution stays private to the fork.
 		expect(my?.onConflict).toBe("ai");

@@ -32,6 +32,10 @@ branches:
     on_conflict: ai
     container:
       image: ghcr.io/codgician/litellm
+      # One manifest list per tag: the tag never encodes an architecture.
+      platforms:
+        - linux/amd64
+        - linux/arm64
       # Proves the image starts and the package imports. Catches an image that
       # builds but cannot run, which is what a bad resolution tends to produce.
       smoke:

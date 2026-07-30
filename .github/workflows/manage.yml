@@ -52,7 +52,8 @@ jobs:
   manage:
     needs: discover
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # A cross-architecture build runs the non-native half under emulation.
+    timeout-minutes: 360
 
     strategy:
       # One fork per runner. They share no state, and a container build is long
@@ -114,6 +115,11 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
           df -h /
+
+      # arm64 is built under emulation on an amd64 runner.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - uses: docker/setup-buildx-action@v3
 
