@@ -125,6 +125,12 @@ export class Git {
 		return [...new Set(paths.filter((line) => line.length > 0))].sort();
 	}
 
+	/** Paths a contribution's delta would touch, without applying it. */
+	async changedPathsBetween(base: string, head: string): Promise<string[]> {
+		const { stdout } = await this.git(["diff", "--name-only", `${base}..${head}`]);
+		return stdout.split("\n").filter((line) => line.length > 0);
+	}
+
 	async commitAll(message: string, options: { allowEmpty?: boolean } = {}): Promise<string> {
 		await this.git(["add", "--all"]);
 		await this.git([

@@ -52,6 +52,12 @@ jobs:
           owner: ${{ github.repository_owner }}
           permission-contents: write
           permission-pull-requests: read
+          # main mirrors upstream and my is built from a release tag, so both
+          # trees carry upstream's own CI definitions. Advancing either branch
+          # updates .github/workflows, which GitHub blocks from an App without
+          # this. Forkit never authors a workflow change; it only replays
+          # upstream's.
+          permission-workflows: write
 
       - name: Check required secrets
         env:

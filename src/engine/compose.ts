@@ -133,6 +133,18 @@ async function applyContribution(
 	const { branch, base, head, pullRequest } = outcome.contribution;
 	const baseline = await git.revParse("HEAD");
 
+	// Forkit pushes with an App token holding workflows:write, which it needs
+	// only to replay upstream's own CI as a branch advances. A contribution that
+	// changed CI would quietly borrow that permission, so it is refused here.
+	const touched = await git.changedPathsBetween(base, head);
+	const ci = touched.filter((path) => path.startsWith(".github/workflows/"));
+	if (ci.length > 0) {
+		throw new ComposeError(
+			`Contribution "${branch}" changes CI definitions, which forkit does not push: ${ci.join(", ")}`,
+			rule.name,
+		);
+	}
+
 	const conflict = await git.applyDelta(base, head);
 
 	let resolution: string | undefined;
