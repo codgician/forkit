@@ -2,7 +2,8 @@ name: Manage forks
 
 on:
   schedule:
-    - cron: "23 * * * *"
+    # GitHub schedules in UTC: 12:00 UTC is 20:00 UTC+8.
+    - cron: "0 12 * * *"
   # A push builds every platform but publishes nothing. Publishing a code change
   # and deciding to release it are different acts.
   push:
