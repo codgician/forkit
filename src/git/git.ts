@@ -120,6 +120,12 @@ export class Git {
 		return stdout.split("\n").filter((line) => line.length > 0);
 	}
 
+	/** Mark resolver-authored paths resolved, including deletions. */
+	async stagePaths(paths: string[]): Promise<void> {
+		if (paths.length === 0) return;
+		await this.git(["add", "--all", "--", ...paths]);
+	}
+
 	/** Paths differing from `ref`, whether staged, unstaged, or untracked. */
 	async changedPaths(ref = "HEAD"): Promise<string[]> {
 		const tracked = await this.git(["diff", "--name-only", ref]);

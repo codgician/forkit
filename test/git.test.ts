@@ -169,9 +169,32 @@ describe("resolution gates", () => {
 		expect(conflict).toBeDefined();
 
 		await Bun.write(join(git.cwd, "shared.txt"), "ours and theirs\n");
-		await git.git(["add", "shared.txt"]);
 
-		expect(await checkResolution(git, conflict!.paths, baseline)).toEqual([]);
+		expect(await checkResolution(git, conflict!.paths, conflict!.paths, baseline)).toEqual([]);
+	});
+
+	test("accepts clean contribution changes beside a resolved conflict", async () => {
+		const git = await newRepo();
+		await commitFile(git, "shared.txt", "original\n", "base");
+		const base = await commitFile(git, "clean.txt", "before\n", "clean base");
+
+		await git.git(["checkout", "--quiet", "-b", "topic"]);
+		await Bun.write(join(git.cwd, "shared.txt"), "theirs\n");
+		await Bun.write(join(git.cwd, "clean.txt"), "contribution\n");
+		await git.commitAll("topic");
+		const head = await git.revParse("HEAD");
+
+		await git.git(["checkout", "--quiet", "main"]);
+		const baseline = await commitFile(git, "shared.txt", "ours\n", "upstream");
+		const conflict = await git.applyDelta(base, head);
+		expect(conflict?.paths).toEqual(["shared.txt"]);
+
+		// The resolver can edit files but has no Git tool with which to stage them.
+		await Bun.write(join(git.cwd, "shared.txt"), "ours and theirs\n");
+
+		expect(
+			await checkResolution(git, conflict!.paths, ["clean.txt", "shared.txt"], baseline),
+		).toEqual([]);
 	});
 
 	test("catch leftover conflict markers", async () => {
@@ -180,7 +203,7 @@ describe("resolution gates", () => {
 		await Bun.write(join(git.cwd, "shared.txt"), "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> topic\n");
 		await git.git(["add", "shared.txt"]);
 
-		const failures = await checkResolution(git, ["shared.txt"], baseline);
+		const failures = await checkResolution(git, ["shared.txt"], ["shared.txt"], baseline);
 		expect(failures.map((f) => f.gate)).toContain("conflict-markers");
 	});
 
@@ -191,7 +214,7 @@ describe("resolution gates", () => {
 		await Bun.write(join(git.cwd, "shared.txt"), "resolved\n");
 		await Bun.write(join(git.cwd, "elsewhere.txt"), "should not be here\n");
 
-		const failures = await checkResolution(git, ["shared.txt"], baseline);
+		const failures = await checkResolution(git, ["shared.txt"], ["shared.txt"], baseline);
 		const outOfScope = failures.find((f) => f.gate === "out-of-scope-edits");
 		expect(outOfScope?.detail).toContain("elsewhere.txt");
 	});
@@ -208,7 +231,9 @@ describe("resolution gates", () => {
 		await git.applyDelta(base, head);
 
 		// Left exactly as git produced it: markers present, index unmerged.
-		const gates = (await checkResolution(git, ["shared.txt"], baseline)).map((f) => f.gate);
+		const gates = (await checkResolution(git, ["shared.txt"], ["shared.txt"], baseline)).map(
+			(f) => f.gate,
+		);
 		expect(gates).toContain("unmerged-entries");
 		expect(gates).toContain("conflict-markers");
 	});

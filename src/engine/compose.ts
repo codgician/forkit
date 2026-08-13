@@ -199,7 +199,7 @@ async function applyContribution(
 			pullRequest: pullRequest
 				? { number: pullRequest.number, title: pullRequest.title, body: pullRequest.body }
 				: undefined,
-		}, rule.name, branch);
+		}, rule.name, branch, touched);
 	}
 
 	if (await git.isClean()) {
@@ -219,13 +219,19 @@ async function resolveConflict(
 	context: ResolverContext,
 	branchName: string,
 	contribution: string,
+	contributionPaths: string[],
 ): Promise<string> {
 	const outcome = await resolver.resolve(context);
 	if (outcome.status === "failed") {
 		throw new ComposeError(`Resolving "${contribution}" failed: ${outcome.reason}`, branchName);
 	}
 
-	const failures = await checkResolution(context.git, context.conflict.paths, context.baseline);
+	const failures = await checkResolution(
+		context.git,
+		context.conflict.paths,
+		contributionPaths,
+		context.baseline,
+	);
 	if (failures.length > 0) {
 		throw new ComposeError(
 			`Resolution of "${contribution}" failed its checks:\n${failures
