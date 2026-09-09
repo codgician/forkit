@@ -13,6 +13,5 @@ branches:
   my:
     track:
       branch: main
-    contributions:
-      - nixos-26.05
+    contributions: []
     on_conflict: ai
