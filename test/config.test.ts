@@ -33,10 +33,6 @@ describe("loadConfig", () => {
 
 		const my = config.branches.find((b) => b.name === "my");
 		expect(my?.track).toMatchObject({ kind: "releases", prerelease: "exclude" });
-		expect(my?.contributions).toEqual([
-			"litellm_configurable_copilot_headers",
-			"litellm_update_github_copilot_models",
-		]);
 		expect(my?.container?.image).toBe("ghcr.io/codgician/litellm");
 		expect(my?.container?.dockerfile).toBe("Dockerfile");
 		// One tag, both architectures.
@@ -53,6 +49,17 @@ describe("loadConfig", () => {
 		const config = await loadConfig(path);
 
 		expect(config.branches[0]?.onConflict).toBe("fail");
+	});
+
+	// Live manifests change when PRs ship. Check contribution parsing against
+	// fixed inputs so automatic cleanup does not invalidate these tests.
+	test("preserves contribution order and accepts an empty list after cleanup", async () => {
+		for (const contributions of [["second", "first"], []]) {
+			const path = await writeConfig(
+				`${BASE}  my:\n    track:\n      branch: main\n    contributions: ${JSON.stringify(contributions)}\n`,
+			);
+			expect((await loadConfig(path)).branches[0]?.contributions).toEqual(contributions);
+		}
 	});
 
 	test("`branch: upstream` is shorthand for the development branch", async () => {
@@ -78,7 +85,6 @@ describe("loadConfig", () => {
 		expect(config.fork).toBe("codgician/proxmox-nixos");
 		expect(config.upstream).toEqual({ repository: "SaumonNet/proxmox-nixos", branch: "main" });
 		expect(my?.track).toEqual({ kind: "branch", branch: "main" });
-		expect(my?.contributions).toEqual(["nixos-26.05"]);
 		expect(my?.onConflict).toBe("ai");
 		expect(my?.container).toBeUndefined();
 	});
