@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import type { BranchRule, ContainerSpec, RepoConfig } from "../config/types.ts";
 import { Git } from "../git/git.ts";
 import type { ConflictResolver, ComposedBranch } from "./compose.ts";
@@ -28,6 +28,8 @@ export interface ArtifactBranch {
 export interface RepositoryArtifact {
 	repository: string;
 	upstreamRepository: string;
+	/** Exact manifest used by compose, for race-safe cleanup after publication. */
+	config?: { path: string; content: string };
 	branches: ArtifactBranch[];
 }
 
@@ -48,6 +50,10 @@ export async function createRepositoryArtifact(
 	directory: string,
 ): Promise<RepositoryArtifact> {
 	await mkdir(join(directory, "sources"), { recursive: true });
+	const manifest = {
+		path: relative(process.cwd(), join(config.configDir, "forkit.yaml")),
+		content: await Bun.file(join(config.configDir, "forkit.yaml")).text(),
+	};
 
 	const github = new GitHub(token);
 	const [snapshot, committer] = await Promise.all([
@@ -65,12 +71,15 @@ export async function createRepositoryArtifact(
 		await workspace.fetch(UPSTREAM_REMOTE, [
 			`+refs/heads/${config.upstream.branch}:refs/remotes/upstream/${config.upstream.branch}`,
 		]);
-		await workspace.fetch(
-			FORK_REMOTE,
-			[...new Set(config.branches.flatMap((rule) => rule.contributions))].map(
-				(branch) => `+refs/heads/${branch}:refs/remotes/${FORK_REMOTE}/${branch}`,
-			),
-		);
+		for (const branch of new Set(config.branches.flatMap((rule) => rule.contributions))) {
+			// GitHub may delete the head branch after merging. Let contribution
+			// resolution prove it shipped before deciding whether absence is fatal.
+			if (await workspace.git.remoteTip(FORK_REMOTE, branch)) {
+				await workspace.fetch(FORK_REMOTE, [
+					`+refs/heads/${branch}:refs/remotes/${FORK_REMOTE}/${branch}`,
+				]);
+			}
+		}
 		// Existing generated tips carry Forkit-Input. Fetching them lets compose
 		// short-circuit before patching, AI, archives, builders, or GHCR. Fetch
 		// independently because a newly configured branch may not exist yet.
@@ -124,6 +133,7 @@ export async function createRepositoryArtifact(
 		const artifact: RepositoryArtifact = {
 			repository: config.fork,
 			upstreamRepository: config.upstream.repository,
+			config: manifest,
 			branches,
 		};
 		await Bun.write(join(directory, "metadata.json"), `${JSON.stringify(artifact, null, 2)}\n`);
@@ -196,6 +206,9 @@ export async function publishRepositoryArtifact(
 
 	for (const branch of artifact.branches) {
 		if (!branch.changed) {
+			if (!dryRun && branch.skipped.length > 0 && await git.remoteTip(FORK_REMOTE, branch.name) !== branch.commit) {
+				throw new Error(`Branch ${branch.name} moved since composition; refusing configuration cleanup`);
+			}
 			results.push({ branch: branch.name, status: "unchanged" });
 			continue;
 		}

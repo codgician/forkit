@@ -43,9 +43,7 @@ export async function resolveContribution(
 	github: GitHub,
 ): Promise<ContributionOutcome> {
 	const ref = `${forkRemote}/${branch}`;
-	if (!(await git.exists(ref))) throw new MissingContributionError(branch, forkRepository);
-
-	const head = await git.revParse(ref);
+	const head = (await git.exists(ref)) ? await git.revParse(ref) : undefined;
 
 	// The open set is already in the snapshot; only fall back to a query for
 	// contributions that are listed but no longer open.
@@ -53,7 +51,8 @@ export async function resolveContribution(
 		snapshot.openPullRequests.find((pull) => pull.headRef === branch) ??
 		(await github.findPullRequestForBranch(upstreamRepository, forkRepository, branch));
 
-	if (pullRequest?.merged && pullRequest.mergeCommitSha) {
+	// A reused branch may carry new work beyond the PR that previously merged.
+	if (pullRequest?.merged && pullRequest.mergeCommitSha && (!head || head === pullRequest.headSha)) {
 		const shipped = await git
 			.isAncestor(pullRequest.mergeCommitSha, sourceCommit)
 			.catch(() => false);
@@ -65,6 +64,7 @@ export async function resolveContribution(
 			};
 		}
 	}
+	if (!head) throw new MissingContributionError(branch, forkRepository);
 
 	// A pull request records the branch it was written against; without one the
 	// development branch is the only sensible reference point.

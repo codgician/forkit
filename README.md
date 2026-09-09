@@ -67,7 +67,10 @@ delta.
   fails the target instead of silently publishing an incomplete result.
 - **Merged contributions remain until shipped.** A contribution is skipped
   only after its pull request is merged and the tracked source contains that
-  merge.
+  merge. After successful publication, the pipeline commits a manifest update
+  removing it from that target's `contributions` list. Targets tracking older
+  sources retain it. A deleted PR head is supported once shipped; a branch
+  with new commits beyond the merged PR is retained.
 - **Inputs are deterministic.** A fingerprint of the source and contribution
   heads makes identical runs reuse the existing generated commit.
 - **Updates are race-safe.** Every branch push is protected by a lease against
@@ -103,6 +106,11 @@ graph per repository:
    uses a native Ubuntu runner; there is no QEMU.
 3. **Publish** advances generated branches and, when configured, combines native
    image digests into one OCI manifest and runs the smoke command.
+4. **Clean up configuration** removes shipped contributions from the manifest
+   on the workflow's branch, even when the generated branch is unchanged. The
+   publisher App needs contents write access to this repository as well as the
+   managed forks. Cleanup refuses to overwrite a manifest edited since compose;
+   rerun against the updated configuration in that case.
 
 A failure in one repository does not cancel another. Publication is serialized
 per repository so concurrent runs cannot race its branches or tags. Push events
@@ -143,6 +151,7 @@ FORKIT_PLATFORM=linux/amd64 pi --no-session -p /forkit-build
 | `DENDRO_API_KEY` | AI resolver credential; without it, conflicts fail. |
 | `TRAJECTORY_ZIP_PASSWD` | Password for encrypted resolver trajectories. |
 | `FORKIT_DRY_RUN` | `1` disables branch and registry publication. |
+| `FORKIT_CONFIG_REPOSITORY`, `FORKIT_CONFIG_BRANCH` | Together enable manifest cleanup commits after publish; CI sets these to the workflow repository and branch. Dry runs never commit cleanup. |
 
 To add a fork, add its manifest. Discovery is automatic; there is no central
 registry or workflow file to edit.

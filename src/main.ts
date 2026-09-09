@@ -2,12 +2,15 @@ import { resolve } from "node:path";
 import { access, mkdir } from "node:fs/promises";
 import { AiConflictResolver } from "./ai/resolver.ts";
 import { discoverConfigFiles, loadConfig } from "./config/load.ts";
+import { hasConfigCleanup, publishConfigCleanup } from "./config/cleanup.ts";
+import { GitHub } from "./github/client.ts";
 import type { RepoConfig } from "./config/types.ts";
 import type { ConflictResolver } from "./engine/compose.ts";
 import {
 	buildArtifactPlatform,
 	createRepositoryArtifact,
 	publishRepositoryArtifact,
+	readArtifact,
 	type RepositoryArtifact,
 } from "./engine/artifact.ts";
 
@@ -71,6 +74,14 @@ async function main(): Promise<number> {
 		for (const result of results) {
 			console.log(`branch ${result.branch}: ${result.status}${result.image ? ` ${result.image}` : ""}`);
 		}
+		const configRepository = process.env.FORKIT_CONFIG_REPOSITORY;
+		const configBranch = process.env.FORKIT_CONFIG_BRANCH;
+		if (configRepository && configBranch) {
+			const updated = await publishConfigCleanup(
+				await readArtifact(artifactDirectory), new GitHub(token), configRepository, configBranch, dryRun,
+			);
+			if (updated) console.log("Removed shipped contributions from the declarative configuration");
+		}
 		return 0;
 	}
 
@@ -103,7 +114,7 @@ async function writeComposeOutputs(artifact: RepositoryArtifact): Promise<void> 
 	const existing = (await Bun.file(path).text().catch(() => "")) || "";
 	await Bun.write(
 		path,
-		`${existing}builds=${JSON.stringify(builds)}\nhas_builds=${builds.length > 0}\nchanged=${changed}\n`,
+		`${existing}builds=${JSON.stringify(builds)}\nhas_builds=${builds.length > 0}\nchanged=${changed}\ncleanup=${hasConfigCleanup(artifact)}\n`,
 	);
 }
 

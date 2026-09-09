@@ -28,6 +28,7 @@ jobs:
       builds: ${{ steps.compose.outputs.builds }}
       has_builds: ${{ steps.compose.outputs.has_builds }}
       changed: ${{ steps.compose.outputs.changed }}
+      cleanup: ${{ steps.compose.outputs.cleanup }}
     steps:
       - uses: actions/checkout@v7
       - name: Generate reader token
@@ -109,7 +110,7 @@ jobs:
     needs: [compose, build]
     if: >-
       always() && needs.compose.result == 'success' &&
-      needs.compose.outputs.changed == 'true' &&
+      (needs.compose.outputs.changed == 'true' || needs.compose.outputs.cleanup == 'true') &&
       (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       !inputs.dry_run
     runs-on: ubuntu-24.04
@@ -149,4 +150,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           FORKIT_REPOSITORY: ${{ inputs.repository }}
+          FORKIT_CONFIG_REPOSITORY: ${{ github.repository }}
+          FORKIT_CONFIG_BRANCH: ${{ github.ref_name }}
         run: nix develop --command pi --no-session -p /forkit-publish

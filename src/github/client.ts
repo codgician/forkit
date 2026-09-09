@@ -49,6 +49,49 @@ export class GitHubError extends Error {
 export class GitHub {
 	constructor(private readonly token?: string) {}
 
+	private async contentsRequest(repository: string, path: string, options: RequestInit, ref?: string): Promise<unknown> {
+		const location = path.split("/").map(encodeURIComponent).join("/");
+		const query = ref === undefined ? "" : `?${new URLSearchParams({ ref })}`;
+		const response = await fetch(`https://api.github.com/repos/${repository}/contents/${location}${query}`, {
+			...options,
+			headers: {
+				authorization: `Bearer ${this.token}`,
+				accept: "application/vnd.github+json",
+				"content-type": "application/json",
+				"user-agent": "forkit",
+			},
+		});
+		if (!response.ok) {
+			throw new GitHubError(`Manifest request failed: ${response.status} ${response.statusText}`, response.status);
+		}
+		return response.json();
+	}
+
+	async readRepositoryFile(repository: string, branch: string, path: string): Promise<{ sha: string; content: string }> {
+		const file = await this.contentsRequest(repository, path, {}, branch) as {
+			type: string; encoding: string; sha: string; content: string;
+		};
+		if (file.type !== "file" || file.encoding !== "base64") {
+			throw new Error(`Expected a base64 file at ${repository}:${path}`);
+		}
+		return { sha: file.sha, content: Buffer.from(file.content, "base64").toString("utf8") };
+	}
+
+	/** GitHub commits just this file, conditional on its current blob SHA. */
+	async updateRepositoryFile(
+		repository: string,
+		branch: string,
+		path: string,
+		sha: string,
+		content: string,
+		message: string,
+	): Promise<void> {
+		await this.contentsRequest(repository, path, {
+			method: "PUT",
+			body: JSON.stringify({ branch, sha, content: Buffer.from(content).toString("base64"), message }),
+		});
+	}
+
 	private async graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
 		if (!this.token) {
 			throw new GitHubError("GitHub GraphQL requires a token; set GITHUB_TOKEN", 401);
@@ -157,7 +200,7 @@ export class GitHub {
 
 		const data = await this.graphql<{ search: { nodes: Partial<RawPullRequest>[] } }>(
 			BRANCH_PULL_REQUEST_QUERY,
-			{ search: `repo:${upstreamRepository} is:pr author:${forkOwner} head:${branch}` },
+			{ search: `repo:${upstreamRepository} is:pr author:${forkOwner} head:${branch} sort:created-desc` },
 		);
 
 		const candidates = data.search.nodes
