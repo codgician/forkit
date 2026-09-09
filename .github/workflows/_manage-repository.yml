@@ -23,12 +23,13 @@ jobs:
   # differently.
   compose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 150
     outputs:
       builds: ${{ steps.compose.outputs.builds }}
       has_builds: ${{ steps.compose.outputs.has_builds }}
       changed: ${{ steps.compose.outputs.changed }}
       cleanup: ${{ steps.compose.outputs.cleanup }}
+      failed: ${{ steps.compose.outputs.failed }}
     steps:
       - uses: actions/checkout@v7
       - name: Generate reader token
@@ -45,6 +46,7 @@ jobs:
         id: compose
         env:
           FORKIT_REPOSITORY: ${{ inputs.repository }}
+          FORKIT_ALLOW_PARTIAL: '1'
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           DENDRO_API_KEY: ${{ secrets.DENDRO_API_KEY }}
           TRAJECTORY_ZIP_PASSWD: ${{ secrets.TRAJECTORY_ZIP_PASSWD }}
@@ -100,7 +102,9 @@ jobs:
           FORKIT_DIGEST_FILE: digests.txt
         run: nix develop --command pi --no-session -p /forkit-build
       - run: touch digests.txt
+        if: always()
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: digest-${{ inputs.artifact }}-${{ strategy.job-index }}
           path: digests.txt
@@ -109,9 +113,8 @@ jobs:
   publish:
     needs: [compose, build]
     if: >-
-      always() && needs.compose.result == 'success' &&
+      always() && !cancelled() && needs.compose.result == 'success' &&
       (needs.compose.outputs.changed == 'true' || needs.compose.outputs.cleanup == 'true') &&
-      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       !inputs.dry_run
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -141,6 +144,7 @@ jobs:
       - run: nix develop --command bun install --frozen-lockfile
       - name: Prepare container publication
         if: needs.compose.outputs.has_builds == 'true'
+        continue-on-error: true
         uses: ./.github/actions/prepare-container-publish
         with:
           artifact: ${{ inputs.artifact }}
@@ -153,3 +157,21 @@ jobs:
           FORKIT_CONFIG_REPOSITORY: ${{ github.repository }}
           FORKIT_CONFIG_BRANCH: ${{ github.ref_name }}
         run: nix develop --command pi --no-session -p /forkit-publish
+
+  # Partial progress stays useful, but any failed target still makes the run red.
+  result:
+    needs: [compose, build, publish]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check target results
+        env:
+          COMPOSE_RESULT: ${{ needs.compose.result }}
+          COMPOSE_FAILED: ${{ needs.compose.outputs.failed }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+        run: |
+          test "$COMPOSE_RESULT" = success
+          test "$COMPOSE_FAILED" = false
+          test "$BUILD_RESULT" = success || test "$BUILD_RESULT" = skipped
+          test "$PUBLISH_RESULT" = success || test "$PUBLISH_RESULT" = skipped

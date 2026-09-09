@@ -20,6 +20,30 @@ branches:
 `;
 
 describe("loadConfig", () => {
+	test("loads a Git upstream with explicit permanent patches and validation", async () => {
+		const config = await loadConfig("repositories/codgician/redrix-ec/forkit.yaml");
+		expect(config.upstream.git).toBe("https://chromium.googlesource.com/chromiumos/platform/ec");
+		expect(config.upstream.repository).toBeUndefined();
+		const my = config.branches.find((branch) => branch.name === "my")!;
+		expect(my.track).toEqual({ kind: "branch", branch: "ec-legacy" });
+		expect(my.contributions).toHaveLength(3);
+		expect(my.validation?.timeout_minutes).toBe(60);
+	});
+
+	test("rejects unsupported Git upstream metadata and ambiguous patch inputs", async () => {
+		const base = { fork: "me/ec", upstream: { git: "https://example.com/ec", branch: "main" } };
+		for (const rule of [
+			{ track: { releases: {} } },
+			{ track: { branch: "main" }, contributions: [{ branch: "patch", cleanup: "when-merged" }] },
+			{ track: { branch: "main" }, contributions: ["patch", { branch: "patch" }] },
+			{ track: { branch: "main" }, contributions: [{ branch: "patch", base: "moving-ref" }] },
+			{ track: { branch: "main" }, contributions: ["my"] },
+		]) {
+			const path = await writeConfig(JSON.stringify({ ...base, branches: { my: rule } }));
+			await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
+		}
+	});
+
 	test("resolves the real litellm config", async () => {
 		const config = await loadConfig("repositories/codgician/litellm/forkit.yaml");
 
@@ -138,6 +162,7 @@ describe("discoverConfigFiles", () => {
 		expect(await discoverConfigFiles(".")).toEqual([
 			"repositories/codgician/litellm/forkit.yaml",
 			"repositories/codgician/proxmox-nixos/forkit.yaml",
+			"repositories/codgician/redrix-ec/forkit.yaml",
 		]);
 	});
 

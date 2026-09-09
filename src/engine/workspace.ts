@@ -8,7 +8,7 @@ export const FORK_REMOTE = "fork";
 
 export interface WorkspaceOptions {
 	forkRepository: string;
-	upstreamRepository: string;
+	upstreamUrl: string;
 	/** Token used for the authenticated push URL. Reads stay anonymous. */
 	token?: string;
 	/**
@@ -43,7 +43,7 @@ export class Workspace {
 		const git = new Git(directory);
 
 		await git.git(["init", "--quiet"]);
-		await git.addRemote(UPSTREAM_REMOTE, `https://github.com/${options.upstreamRepository}.git`);
+		await git.addRemote(UPSTREAM_REMOTE, options.upstreamUrl);
 		await git.addRemote(
 			FORK_REMOTE,
 			options.token

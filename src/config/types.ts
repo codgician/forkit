@@ -11,6 +11,35 @@ export type TrackSpec =
 
 export type ConflictPolicy = "ai" | "fail";
 
+export interface ContributionSpec {
+	branch: string;
+	/** Exact start of this patch's delta, including for stacked patches. */
+	base?: string;
+	cleanup: "manual" | "when-merged";
+}
+
+export type Contribution = string | ContributionSpec;
+
+export function contributionSpec(value: Contribution, githubUpstream: boolean): ContributionSpec {
+	return typeof value === "string"
+		? { branch: value, cleanup: githubUpstream ? "when-merged" : "manual" }
+		: value;
+}
+
+export interface UpstreamSpec {
+	repository?: string;
+	git?: string;
+	branch: string;
+}
+
+export function upstreamIdentity(upstream: UpstreamSpec): string {
+	return upstream.repository ?? upstream.git!;
+}
+
+export function upstreamGitUrl(upstream: UpstreamSpec): string {
+	return upstream.git ?? `https://github.com/${upstream.repository}.git`;
+}
+
 export interface BranchRule {
 	/** Branch name in the fork that forkit maintains. */
 	name: string;
@@ -19,11 +48,13 @@ export interface BranchRule {
 	 * Ordered fork branch names whose deltas are applied on top of the tracked
 	 * source. Empty means the branch is a direct mirror.
 	 */
-	contributions: string[];
+	contributions: Contribution[];
 	/** What to do when applying a contribution conflicts. */
 	onConflict: ConflictPolicy;
 	/** Absent means this branch is never built. */
 	container?: ContainerSpec;
+	/** Executed in an isolated source archive before this target is published. */
+	validation?: { command: string[]; timeout_minutes: number };
 }
 
 export interface ContainerSpec {
@@ -40,14 +71,7 @@ export interface ContainerSpec {
 export interface RepoConfig {
 	/** owner/repo of the fork forkit writes to. */
 	fork: string;
-	upstream: {
-		repository: string;
-		/**
-		 * Development branch: the merge-base for contributions without an open
-		 * pull request, and the target of `track: { branch: upstream }`.
-		 */
-		branch: string;
-	};
+	upstream: UpstreamSpec;
 	branches: BranchRule[];
 	/** Absolute path to the directory holding this forkit.yaml. */
 	configDir: string;

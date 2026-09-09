@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { BranchRule, RepoConfig } from "../config/types.ts";
+import { upstreamIdentity, type BranchRule, type RepoConfig } from "../config/types.ts";
 import { checkResolution } from "../git/gates.ts";
 import type { ConflictState, Git } from "../git/git.ts";
 import type { GitHub, UpstreamSnapshot } from "../github/client.ts";
@@ -63,11 +63,23 @@ export async function composeBranch(
 	snapshot: UpstreamSnapshot,
 	github: GitHub,
 	resolver: ConflictResolver | undefined,
+	sources: Map<string, Promise<string>> = new Map(),
 ): Promise<ComposedBranch> {
-	const source = resolveSource(rule.track, config.upstream.repository, snapshot);
+	const source = resolveSource(rule.track, upstreamIdentity(config.upstream), snapshot);
 
-	await git.fetch(UPSTREAM_REMOTE, [`+${source.fetchSpec}:refs/forkit/source`]);
-	const sourceCommit = await git.revParse("refs/forkit/source");
+	// Targets sharing a source must use one immutable observation of that ref.
+	if (!sources.has(source.fetchSpec)) {
+		sources.set(source.fetchSpec, (async () => {
+			const ref = `refs/forkit/sources/${Buffer.from(source.fetchSpec).toString("hex")}`;
+			await git.fetch(UPSTREAM_REMOTE, [`+${source.fetchSpec}:${ref}`]);
+			const commit = await git.revParse(ref);
+			if (source.kind === "branch") {
+				await git.updateRef(`refs/remotes/upstream/${source.ref}`, commit);
+			}
+			return commit;
+		})());
+	}
+	const sourceCommit = await sources.get(source.fetchSpec)!;
 
 	const localPrevious = `${FORK_REMOTE}/${rule.name}`;
 	const previous = (await git.exists(localPrevious))
@@ -193,7 +205,7 @@ async function applyContribution(
 		resolution = await resolveConflict(resolver, {
 			git,
 			conflict,
-			description: `contribution "${branch}" applied to ${config.upstream.repository} ${source.ref}`,
+			description: `contribution "${branch}" applied to ${upstreamIdentity(config.upstream)} ${source.ref}`,
 			baseline,
 			upstreamCommits: await git.logSubjects(`${base}..${source.ref}`, 40).catch(() => []),
 			pullRequest: pullRequest

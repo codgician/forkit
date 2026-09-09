@@ -58,13 +58,73 @@ branches:
 request. When a pull request exists, its actual base branch determines the
 delta.
 
+Upstreams may also be HTTPS Git repositories on other hosts. Downstream
+repositories always live on GitHub. Use `upstream.git` instead of
+`upstream.repository`; branch and tag tracking use Git, while `releases` and
+`when-merged` cleanup require a GitHub upstream:
+
+```yaml
+fork: codgician/redrix-ec
+upstream:
+  git: https://chromium.googlesource.com/chromiumos/platform/ec
+  branch: ec-legacy
+branches:
+  ec-legacy:
+    track: { branch: ec-legacy }
+  my:
+    track: { branch: ec-legacy }
+    contributions:
+      - branch: patches/mkbp-host-events
+        base: b5f7b64a1d8f86b82f8e1ea6290d97a2dedea12d
+        cleanup: manual
+    on_conflict: fail
+```
+
+Object contributions declare a branch, an optional full base commit SHA, and
+`cleanup: manual` (default) or `when-merged`. An explicit base must be an
+ancestor of the contribution head and defines exactly its delta, including
+when patches are stacked. Without it, manual patches use the merge-base with
+`upstream.branch`. String contributions retain automatic PR lookup and cleanup
+for GitHub upstreams, and use manual cleanup for other Git hosts. Manual patches
+never query PRs; an empty application fails for inspection instead of deleting
+the configuration entry. Patch inputs cannot also be generated target branches.
+
+Keep durable edits on the patch branches. `my` is generated and may be rewritten
+as upstream advances. Tags use semantic version ordering when possible, then
+Git creator date (tagger date for annotated tags, commit date for lightweight
+tags), with tag names breaking ties.
+
+## Validation
+
+Any target may declare a validation command, independently of container builds:
+
+```yaml
+validation:
+  command: [bash, -c, 'exec "$FORKIT_CONFIG_DIR/validate.sh"']
+  timeout_minutes: 60
+```
+
+The command runs after composition in a disposable archive of the exact output
+commit, including on unchanged targets. It has no checkout Git metadata and
+does not inherit GitHub or AI credentials. Build-host adaptations cannot change
+the published tree. This is process/environment isolation, not a filesystem or
+network sandbox; validation scripts are trusted configuration.
+
+`FORKIT_CONFIG_DIR` points to the manifest's directory. `FORKIT_REPOSITORY`,
+`FORKIT_BRANCH`, `FORKIT_COMMIT`, and `FORKIT_SOURCE_COMMIT` identify the input.
+Command arguments are passed directly; use an explicit shell when needed.
+A failed command prevents publication of that target. The default timeout is
+30 minutes. Redrix's manifest includes a pinned Nix toolchain, a firmware build,
+native lid/MKBP tests, and the backlight regression test.
+
 ## Guarantees
 
 - **Contributions are deltas, not merges.** Forkit applies only `base..head`, so
   unrelated commits carried by a contribution branch do not leak into the
   generated branch.
 - **Composition is all-or-nothing.** A missing or conflicting contribution
-  fails the target instead of silently publishing an incomplete result.
+  fails the target instead of silently publishing an incomplete result. Other
+  targets can still advance; an unpatched mirror is independent of patch failures.
 - **Merged contributions remain until shipped.** A contribution is skipped
   only after its pull request is merged and the tracked source contains that
   merge. After successful publication, the pipeline commits a manifest update
@@ -101,7 +161,8 @@ The scheduled workflow discovers every manifest and creates one isolated job
 graph per repository:
 
 1. **Compose** resolves sources and contributions once and bundles the exact
-   generated commits.
+   generated commits after validation. Targets sharing a source use the same
+   observed upstream commit. Target failures are recorded in the artifact.
 2. **Build** runs only when a changed target declares a container. Each platform
    uses a native Ubuntu runner; there is no QEMU.
 3. **Publish** advances generated branches and, when configured, combines native
@@ -113,7 +174,10 @@ graph per repository:
    rerun against the updated configuration in that case.
 
 A failure in one repository does not cancel another. Publication is serialized
-per repository so concurrent runs cannot race its branches or tags. Push events
+per repository so concurrent runs cannot race its branches or tags. Successful
+targets publish even when another target fails composition, validation, or a
+container build. The final result still fails the workflow to report the problem.
+Cleanup includes only successfully published targets. Push events
 exercise composition and builds in dry-run mode; scheduled and explicit runs
 may publish.
 
@@ -152,6 +216,7 @@ FORKIT_PLATFORM=linux/amd64 pi --no-session -p /forkit-build
 | `TRAJECTORY_ZIP_PASSWD` | Password for encrypted resolver trajectories. |
 | `FORKIT_DRY_RUN` | `1` disables branch and registry publication. |
 | `FORKIT_CONFIG_REPOSITORY`, `FORKIT_CONFIG_BRANCH` | Together enable manifest cleanup commits after publish; CI sets these to the workflow repository and branch. Dry runs never commit cleanup. |
+| `FORKIT_ALLOW_PARTIAL` | CI sets `1` so compose emits successful target artifacts despite target failures; the final workflow job reports failure. Local compose exits nonzero by default. |
 
 To add a fork, add its manifest. Discovery is automatic; there is no central
 registry or workflow file to edit.

@@ -85,34 +85,78 @@ const Container = z
  */
 const OnConflict = z.enum(["ai", "fail"]).default("fail");
 
+const Contribution = z.union([
+	z.string().min(1),
+	z.object({
+		branch: z.string().min(1),
+		base: z.string().regex(/^[0-9a-f]{40}$/, "must be a full base commit SHA").optional(),
+		cleanup: z.enum(["manual", "when-merged"]).default("manual"),
+	}).strict(),
+]);
+
+const Upstream = z.union([
+	z.object({ repository: RepoSlug, branch: z.string().min(1) }).strict(),
+	z.object({
+		git: z.url().refine((value) => {
+			try {
+				const url = new URL(value);
+				return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
+			} catch {
+				return false;
+			}
+		}, "must be an HTTPS Git URL without credentials, query or fragment"),
+		branch: z.string().min(1),
+	}).strict(),
+]);
+
 const BranchRule = z
 	.object({
 		track: Track,
 		contributions: z
-			.array(z.string().min(1))
+			.array(Contribution)
 			.default([])
-			.refine((list) => new Set(list).size === list.length, {
+			.refine((list) => new Set(list.map((item) => typeof item === "string" ? item : item.branch)).size === list.length, {
 				message: "lists the same branch more than once",
 			}),
 		on_conflict: OnConflict,
 		container: Container.optional(),
+		validation: z.object({
+			command: z.array(z.string().min(1)).min(1),
+			timeout_minutes: z.number().int().min(1).max(120).default(30),
+		}).strict().optional(),
 	})
 	.strict();
 
 export const RepoConfigFile = z
 	.object({
 		fork: RepoSlug,
-		upstream: z.object({ repository: RepoSlug, branch: z.string().min(1) }).strict(),
+		upstream: Upstream,
 		branches: z.record(z.string().min(1), BranchRule),
 	})
 	.strict()
-	.refine((config) => config.fork !== config.upstream.repository, {
+	.refine((config) => !("repository" in config.upstream) || config.fork !== config.upstream.repository, {
 		message: "`fork` and `upstream.repository` must differ",
 		path: ["fork"],
 	})
 	.refine((config) => Object.keys(config.branches).length > 0, {
 		message: "must declare at least one branch",
 		path: ["branches"],
+	})
+	.superRefine((config, context) => {
+		for (const [name, rule] of Object.entries(config.branches)) {
+			if ("git" in config.upstream && "releases" in rule.track) {
+				context.addIssue({ code: "custom", path: ["branches", name, "track"], message: "releases require a GitHub upstream; use branch or tags for a Git URL" });
+			}
+			for (const item of rule.contributions) {
+				const branch = typeof item === "string" ? item : item.branch;
+				if (Object.hasOwn(config.branches, branch)) {
+					context.addIssue({ code: "custom", path: ["branches", name, "contributions"], message: `contribution ${branch} is also a generated target` });
+				}
+				if ("git" in config.upstream && typeof item !== "string" && item.cleanup === "when-merged") {
+					context.addIssue({ code: "custom", path: ["branches", name, "contributions"], message: "when-merged cleanup requires a GitHub upstream" });
+				}
+			}
+		}
 	});
 
 export type RepoConfigFile = z.infer<typeof RepoConfigFile>;

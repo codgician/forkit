@@ -1,4 +1,5 @@
-import { isSeq, parseDocument } from "yaml";
+import { isMap, isSeq, parseDocument } from "yaml";
+import { upstreamIdentity } from "./types.ts";
 import type { RepositoryArtifact } from "../engine/artifact.ts";
 import { GitHubError, type GitHub } from "../github/client.ts";
 import { RepoConfigFile } from "./schema.ts";
@@ -14,7 +15,7 @@ export function cleanedConfig(artifact: RepositoryArtifact): string | undefined 
 	const document = parseDocument(artifact.config.content);
 	if (document.errors.length) throw new Error(`Invalid manifest: ${document.errors[0]!.message}`);
 	const config = RepoConfigFile.parse(document.toJS());
-	if (config.fork !== artifact.repository || config.upstream.repository !== artifact.upstreamRepository) {
+	if (config.fork !== artifact.repository || upstreamIdentity(config.upstream) !== artifact.upstreamRepository) {
 		throw new Error("Artifact manifest does not match its repositories");
 	}
 
@@ -24,7 +25,10 @@ export function cleanedConfig(artifact: RepositoryArtifact): string | undefined 
 		if (!isSeq(contributions)) throw new Error(`Missing contributions for ${branch.name}`);
 		const removed = new Set(branch.skipped.map((skip) => skip.branch));
 		for (let index = contributions.items.length - 1; index >= 0; index--) {
-			if (removed.has(contributions.get(index) as string)) contributions.delete(index);
+			const item = contributions.get(index);
+			const name = isMap(item) ? item.get("branch") : item;
+			const manual = isMap(item) && (item.get("cleanup") ?? "manual") === "manual";
+			if (!manual && removed.has(name as string)) contributions.delete(index);
 		}
 	}
 	// Keep YAML comments, quoting and key order, without introducing schema defaults.

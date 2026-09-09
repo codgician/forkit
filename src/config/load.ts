@@ -62,6 +62,7 @@ export async function loadConfig(configPath: string): Promise<RepoConfig> {
 		contributions: rule.contributions,
 		onConflict: rule.on_conflict,
 		...(rule.container ? { container: rule.container } : {}),
+		...(rule.validation ? { validation: rule.validation } : {}),
 	}));
 
 	assertNoTagCollision(branches, configPath);

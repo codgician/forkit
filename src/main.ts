@@ -50,12 +50,12 @@ async function main(): Promise<number> {
 			console.log(`branch ${branch.name}: ${branch.changed ? "changed" : "unchanged"} ${branch.commit.slice(0, 8)}`);
 		}
 		await writeComposeOutputs(artifact);
-		return 0;
+		return artifact.failures?.length && process.env.FORKIT_ALLOW_PARTIAL !== "1" ? 1 : 0;
 	}
 
 	if (args.includes("--build")) {
 		if (!platform) throw new Error("--build requires --platform");
-		const pairs = await buildArtifactPlatform(
+		const { pairs, failures } = await buildArtifactPlatform(
 			artifactDirectory,
 			platform,
 			process.env.GITHUB_REPOSITORY ?? "codgician/forkit",
@@ -64,7 +64,8 @@ async function main(): Promise<number> {
 		const output = process.env.FORKIT_DIGEST_FILE;
 		if (output) await Bun.write(output, pairs.length ? `${pairs.join("\n")}\n` : "");
 		for (const pair of pairs) console.log(`digest ${pair}`);
-		return 0;
+		for (const failure of failures) console.error(failure);
+		return failures.length ? 1 : 0;
 	}
 
 	if (args.includes("--publish")) {
@@ -72,17 +73,20 @@ async function main(): Promise<number> {
 		const digests = await readDigests(valueOf(args, "--digests") ?? "digests");
 		const results = await publishRepositoryArtifact(artifactDirectory, digests, token, dryRun);
 		for (const result of results) {
-			console.log(`branch ${result.branch}: ${result.status}${result.image ? ` ${result.image}` : ""}`);
+			console.log(`branch ${result.branch}: ${result.status}${result.image ? ` ${result.image}` : ""}${result.reason ? `: ${result.reason}` : ""}`);
 		}
 		const configRepository = process.env.FORKIT_CONFIG_REPOSITORY;
 		const configBranch = process.env.FORKIT_CONFIG_BRANCH;
 		if (configRepository && configBranch) {
+			const artifact = await readArtifact(artifactDirectory);
+			const successful = new Set(results.filter((result) => result.status !== "failed").map((result) => result.branch));
 			const updated = await publishConfigCleanup(
-				await readArtifact(artifactDirectory), new GitHub(token), configRepository, configBranch, dryRun,
+				{ ...artifact, branches: artifact.branches.filter((branch) => successful.has(branch.name)) },
+				new GitHub(token), configRepository, configBranch, dryRun,
 			);
 			if (updated) console.log("Removed shipped contributions from the declarative configuration");
 		}
-		return 0;
+		return results.some((result) => result.status === "failed") || (await readArtifact(artifactDirectory)).failures?.length ? 1 : 0;
 	}
 
 	console.error("Expected one of --plan, --compose, --build, --publish");
@@ -114,7 +118,7 @@ async function writeComposeOutputs(artifact: RepositoryArtifact): Promise<void> 
 	const existing = (await Bun.file(path).text().catch(() => "")) || "";
 	await Bun.write(
 		path,
-		`${existing}builds=${JSON.stringify(builds)}\nhas_builds=${builds.length > 0}\nchanged=${changed}\ncleanup=${hasConfigCleanup(artifact)}\n`,
+		`${existing}builds=${JSON.stringify(builds)}\nhas_builds=${builds.length > 0}\nchanged=${changed}\ncleanup=${hasConfigCleanup(artifact)}\nfailed=${!!artifact.failures?.length}\n`,
 	);
 }
 

@@ -55,7 +55,7 @@ export class Git {
 		await this.git([
 			"fetch",
 			"--no-write-fetch-head",
-			...(options.tags ? ["--tags", "--force"] : []),
+			...(options.tags ? ["--tags", "--force"] : ["--no-tags"]),
 			remote,
 			...refspecs,
 		]);

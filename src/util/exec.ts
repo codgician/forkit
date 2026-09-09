@@ -9,6 +9,8 @@ export interface RunResult {
 export interface RunOptions {
 	cwd?: string;
 	env?: Record<string, string>;
+	/** Disable inheritance when executing repository validation commands. */
+	inheritEnv?: boolean;
 	/** Fail the returned promise on a non-zero exit. Default: true. */
 	check?: boolean;
 	stdin?: string;
@@ -40,7 +42,7 @@ export function run(argv: string[], options: RunOptions = {}): Promise<RunResult
 	return new Promise((resolve, reject) => {
 		const child = spawn(command, args, {
 			cwd: options.cwd,
-			env: options.env ? { ...process.env, ...options.env } : process.env,
+			env: options.inheritEnv === false ? options.env : options.env ? { ...process.env, ...options.env } : process.env,
 			stdio: [options.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
 		});
 
