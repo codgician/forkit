@@ -37,7 +37,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
-      - run: nix develop --command bun install --frozen-lockfile
+      - name: Install dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if nix develop --command bun install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 5))
+            fi
+          done
+          exit 1
       - id: plan
         env:
           FORKIT_REPOSITORY: ${{ inputs.repository }}

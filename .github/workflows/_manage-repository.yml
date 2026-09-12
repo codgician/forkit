@@ -40,8 +40,17 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           permission-contents: read
-      - uses: cachix/install-nix-action@v31
-      - run: nix develop --command bun install --frozen-lockfile
+      - name: Install dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if nix develop --command bun install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 5))
+            fi
+          done
+          exit 1
       - name: Compose
         id: compose
         env:
@@ -77,8 +86,17 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
-      - run: nix develop --command bun install --frozen-lockfile
+      - name: Install dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if nix develop --command bun install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 5))
+            fi
+          done
+          exit 1
       - name: Reclaim runner disk
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
@@ -140,8 +158,17 @@ jobs:
           # Managed trees carry upstream's CI. Advancing one updates workflow
           # files; compose refuses any contribution that would author one.
           permission-workflows: write
-      - uses: cachix/install-nix-action@v31
-      - run: nix develop --command bun install --frozen-lockfile
+      - name: Install dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if nix develop --command bun install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 5))
+            fi
+          done
+          exit 1
       - name: Prepare container publication
         if: needs.compose.outputs.has_builds == 'true'
         continue-on-error: true
