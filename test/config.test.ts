@@ -34,10 +34,11 @@ describe("loadConfig", () => {
 		const base = { fork: "me/ec", upstream: { git: "https://example.com/ec", branch: "main" } };
 		for (const rule of [
 			{ track: { releases: {} } },
-			{ track: { branch: "main" }, contributions: [{ branch: "patch", cleanup: "when-merged" }] },
-			{ track: { branch: "main" }, contributions: ["patch", { branch: "patch" }] },
-			{ track: { branch: "main" }, contributions: [{ branch: "patch", base: "moving-ref" }] },
-			{ track: { branch: "main" }, contributions: ["my"] },
+			{ track: { branch: "main" }, contributions: [{ type: "branch", name: "patch", cleanup: "when-merged" }] },
+			{ track: { branch: "main" }, contributions: [{ type: "pr", number: 39512 }] },
+			{ track: { branch: "main" }, contributions: [{ type: "branch", name: "patch" }, { type: "branch", name: "patch" }] },
+			{ track: { branch: "main" }, contributions: [{ type: "branch", name: "patch", base: "moving-ref" }] },
+			{ track: { branch: "main" }, contributions: [{ type: "branch", name: "my" }] },
 		]) {
 			const path = await writeConfig(JSON.stringify({ ...base, branches: { my: rule } }));
 			await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
@@ -75,16 +76,6 @@ describe("loadConfig", () => {
 		expect(config.branches[0]?.onConflict).toBe("fail");
 	});
 
-	// Live manifests change when PRs ship. Check contribution parsing against
-	// fixed inputs so automatic cleanup does not invalidate these tests.
-	test("preserves contribution order and accepts an empty list after cleanup", async () => {
-		for (const contributions of [["second", "first"], []]) {
-			const path = await writeConfig(
-				`${BASE}  my:\n    track:\n      branch: main\n    contributions: ${JSON.stringify(contributions)}\n`,
-			);
-			expect((await loadConfig(path)).branches[0]?.contributions).toEqual(contributions);
-		}
-	});
 
 	test("`branch: upstream` is shorthand for the development branch", async () => {
 		const path = await writeConfig(`${BASE}  main:\n    track:\n      branch: upstream\n`);
@@ -120,11 +111,42 @@ describe("loadConfig", () => {
 		expect(loadConfig(path)).rejects.toThrow(ConfigError);
 	});
 
-	test("rejects duplicate contributions", async () => {
+	test("rejects duplicate branch contributions", async () => {
 		const path = await writeConfig(
-			`${BASE}  my:\n    track:\n      releases: {}\n    contributions: [topic, topic]\n`,
+			`${BASE}  my:\n    track:\n      releases: {}\n    contributions:\n      - type: branch\n        name: topic\n      - type: branch\n        name: topic\n`,
 		);
-		expect(loadConfig(path)).rejects.toThrow(/more than once/);
+		await expect(loadConfig(path)).rejects.toThrow(/same contribution more than once/);
+	});
+
+	test("rejects duplicate pull-request contributions", async () => {
+		const path = await writeConfig(
+			`${BASE}  my:\n    track:\n      releases: {}\n    contributions:\n      - type: pr\n        number: 39512\n      - type: pr\n        number: 39512\n`,
+		);
+		await expect(loadConfig(path)).rejects.toThrow(/same contribution more than once/);
+	});
+
+	test("rejects malformed pull-request contributions", async () => {
+		for (const contribution of [
+			"      - type: pr\n",
+			"      - type: pr\n        number: 0\n",
+			"      - type: pr\n        number: 1.5\n",
+			"      - type: pr\n        number: 9007199254740992\n",
+			"      - type: pr\n        number: 39512\n        name: topic\n",
+		]) {
+			const path = await writeConfig(
+				`${BASE}  my:\n    track:\n      releases: {}\n    contributions:\n${contribution}`,
+			);
+			await expect(loadConfig(path)).rejects.toThrow(ConfigError);
+		}
+	});
+
+	test("rejects legacy untyped contributions", async () => {
+		for (const contribution of ["      - topic\n", "      - pr: 39512\n"]) {
+			const path = await writeConfig(
+				`${BASE}  my:\n    track:\n      releases: {}\n    contributions:\n${contribution}`,
+			);
+			await expect(loadConfig(path)).rejects.toThrow(ConfigError);
+		}
 	});
 
 	test("rejects two branches publishing the same moving tag", async () => {

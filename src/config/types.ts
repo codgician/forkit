@@ -10,20 +10,21 @@ export type TrackSpec =
 	| { kind: "tags"; match: RegExp };
 
 export type ConflictPolicy = "ai" | "fail";
-
-export interface ContributionSpec {
-	branch: string;
+export type ContributionSpec = (
+	| { type: "branch"; name: string }
+	| { type: "pr"; number: number }
+) & {
 	/** Exact start of this patch's delta, including for stacked patches. */
 	base?: string;
-	cleanup: "manual" | "when-merged";
+	cleanup?: "manual" | "when-merged";
+};
+
+export function contributionSpec(value: ContributionSpec, githubUpstream: boolean): ContributionSpec & { cleanup: "manual" | "when-merged" } {
+	return { ...value, cleanup: value.cleanup ?? (githubUpstream ? "when-merged" : "manual") };
 }
 
-export type Contribution = string | ContributionSpec;
-
-export function contributionSpec(value: Contribution, githubUpstream: boolean): ContributionSpec {
-	return typeof value === "string"
-		? { branch: value, cleanup: githubUpstream ? "when-merged" : "manual" }
-		: value;
+export function contributionIdentity(value: ContributionSpec, upstreamRepository: string): string {
+	return value.type === "branch" ? value.name : `${upstreamRepository}#${value.number}`;
 }
 
 export interface UpstreamSpec {
@@ -45,10 +46,10 @@ export interface BranchRule {
 	name: string;
 	track: TrackSpec;
 	/**
-	 * Ordered fork branch names whose deltas are applied on top of the tracked
-	 * source. Empty means the branch is a direct mirror.
+	 * Ordered branch or pull-request contributions whose deltas are applied on
+	 * top of the tracked source. Empty means the branch is a direct mirror.
 	 */
-	contributions: Contribution[];
+	contributions: ContributionSpec[];
 	/** What to do when applying a contribution conflicts. */
 	onConflict: ConflictPolicy;
 	/** Absent means this branch is never built. */

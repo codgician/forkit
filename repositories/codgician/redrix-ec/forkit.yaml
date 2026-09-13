@@ -15,13 +15,16 @@ branches:
     # Independent patches based on the official R151 firmware source.
     # These are permanent downstream patches, not upstream review requests.
     contributions:
-      - branch: patches/mkbp-host-events
+      - type: branch
+        name: patches/mkbp-host-events
         base: b5f7b64a1d8f86b82f8e1ea6290d97a2dedea12d
         cleanup: manual
-      - branch: patches/mkbp-sci-mask
+      - type: branch
+        name: patches/mkbp-sci-mask
         base: b5f7b64a1d8f86b82f8e1ea6290d97a2dedea12d
         cleanup: manual
-      - branch: patches/backlight-sysjump
+      - type: branch
+        name: patches/backlight-sysjump
         base: b5f7b64a1d8f86b82f8e1ea6290d97a2dedea12d
         cleanup: manual
     on_conflict: fail

@@ -1,5 +1,5 @@
-import { isMap, isSeq, parseDocument } from "yaml";
-import { upstreamIdentity } from "./types.ts";
+import { isSeq, parseDocument } from "yaml";
+import { contributionIdentity, contributionSpec, upstreamIdentity } from "./types.ts";
 import type { RepositoryArtifact } from "../engine/artifact.ts";
 import { GitHubError, type GitHub } from "../github/client.ts";
 import { RepoConfigFile } from "./schema.ts";
@@ -25,10 +25,9 @@ export function cleanedConfig(artifact: RepositoryArtifact): string | undefined 
 		if (!isSeq(contributions)) throw new Error(`Missing contributions for ${branch.name}`);
 		const removed = new Set(branch.skipped.map((skip) => skip.branch));
 		for (let index = contributions.items.length - 1; index >= 0; index--) {
-			const item = contributions.get(index);
-			const name = isMap(item) ? item.get("branch") : item;
-			const manual = isMap(item) && (item.get("cleanup") ?? "manual") === "manual";
-			if (!manual && removed.has(name as string)) contributions.delete(index);
+			const spec = contributionSpec(config.branches[branch.name]!.contributions[index]!, "repository" in config.upstream);
+			const name = contributionIdentity(spec, artifact.upstreamRepository);
+			if (spec.cleanup === "when-merged" && removed.has(name)) contributions.delete(index);
 		}
 	}
 	// Keep YAML comments, quoting and key order, without introducing schema defaults.

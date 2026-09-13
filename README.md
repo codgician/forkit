@@ -1,8 +1,9 @@
 # forkit
 
 Declarative maintenance for downstream forks. Forkit tracks an upstream branch,
-tag, or release; reapplies selected contribution branches; advances generated
-fork branches; and optionally publishes multi-architecture containers.
+tag, or release; reapplies selected contribution branches and upstream pull
+requests; advances generated fork branches; and optionally publishes
+multi-architecture containers.
 
 ## Configuration
 
@@ -24,8 +25,12 @@ branches:
         prerelease: false
         match: '^v[0-9]+\.[0-9]+\.[0-9]+$'
     contributions:
-      - litellm_configurable_copilot_headers
-      - litellm_update_github_copilot_models
+      - type: branch
+        name: litellm_configurable_copilot_headers
+      - type: branch
+        name: litellm_update_github_copilot_models
+      - type: pr
+        number: 39512
     on_conflict: ai
     container:
       image: ghcr.io/codgician/litellm
@@ -50,9 +55,27 @@ branches:
   my:
     track:
       branch: main
-    contributions: [nixos-26.05]
+    contributions: []
     on_conflict: ai
 ```
+
+Every contribution declares its source explicitly:
+
+- `type: branch` with `name` selects a branch in `fork`.
+- `type: pr` with `number` selects a pull request in `upstream.repository`,
+  regardless of author or head repository. Forkit fetches the upstream
+  `refs/pull/<number>/head` ref, so no copy of the branch is needed in your fork.
+
+Both forms resolve to a Git ref plus optional PR metadata, then share fetching,
+head verification, shipped-merge detection, and delta calculation. A branch with
+a matching upstream PR uses that same retained PR ref, unless the branch has
+new work beyond its merged PR. Manual branch patches are fetched directly from
+the fork. Shipped contributions are skipped without requiring their old heads.
+
+Entries are applied in order. Duplicate entries are rejected. Bare branch
+strings and untyped PR objects are not accepted; migrate them to the forms above.
+An unavailable PR or a head that changes during resolution fails composition
+instead of falling back to a different contribution.
 
 `upstream.branch` is the development base used when a contribution has no pull
 request. When a pull request exists, its actual base branch determines the
@@ -74,20 +97,22 @@ branches:
   my:
     track: { branch: ec-legacy }
     contributions:
-      - branch: patches/mkbp-host-events
+      - type: branch
+        name: patches/mkbp-host-events
         base: b5f7b64a1d8f86b82f8e1ea6290d97a2dedea12d
         cleanup: manual
     on_conflict: fail
 ```
 
-Object contributions declare a branch, an optional full base commit SHA, and
-`cleanup: manual` (default) or `when-merged`. An explicit base must be an
-ancestor of the contribution head and defines exactly its delta, including
-when patches are stacked. Without it, manual patches use the merge-base with
-`upstream.branch`. String contributions retain automatic PR lookup and cleanup
-for GitHub upstreams, and use manual cleanup for other Git hosts. Manual patches
-never query PRs; an empty application fails for inspection instead of deleting
-the configuration entry. Patch inputs cannot also be generated target branches.
+Contributions may declare an optional full `base` commit SHA and a `cleanup`
+policy: `manual` or `when-merged`. When omitted, cleanup defaults to `when-merged`
+for GitHub upstreams and `manual` for other Git hosts. An explicit base must be
+an ancestor of the contribution head and defines exactly its delta, including
+when patches are stacked. Without it, manual branches use the merge-base with
+`upstream.branch`. Manual branch patches never query PRs; manual entries are
+never automatically skipped or removed. An empty application fails for
+inspection instead of deleting configuration. Patch inputs cannot also be
+generated target branches.
 
 Keep durable edits on the patch branches. `my` is generated and may be rewritten
 as upstream advances. Tags use semantic version ordering when possible, then
@@ -138,7 +163,8 @@ native lid/MKBP tests, and the backlight regression test.
 - **Versions do not regress by publication date.** Parseable release and tag
   names are ordered semantically.
 
-Forkit reads contribution branches but never updates them.
+Forkit reads contribution branches and PR refs but never updates them. Explicit
+PRs are recorded as `owner/repository#number` in generated commit provenance.
 
 ## Conflict resolution
 

@@ -210,6 +210,18 @@ export class GitHub {
 
 		return candidates.find((pull) => pull.state === "open") ?? candidates[0];
 	}
+
+	/** Fetch one pull request by its upstream number, regardless of its author. */
+	async getPullRequest(upstreamRepository: string, number: number): Promise<PullRequest> {
+		const { owner, repo } = parseRepoRef(upstreamRepository);
+		const data = await this.graphql<PullRequestResponse>(PULL_REQUEST_QUERY, { owner, repo, number });
+		const pullRequest = data.repository?.pullRequest;
+		if (!pullRequest) {
+			throw new GitHubError(`Pull request #${number} does not exist in ${upstreamRepository}`, 404);
+		}
+
+		return toPullRequest(pullRequest);
+	}
 }
 
 const PULL_REQUEST_FIELDS = `
@@ -248,12 +260,23 @@ query($search: String!) {
 	}
 }`;
 
+const PULL_REQUEST_QUERY = `
+query($owner: String!, $repo: String!, $number: Int!) {
+	repository(owner: $owner, name: $repo) {
+		pullRequest(number: $number) { ${PULL_REQUEST_FIELDS} }
+	}
+}`;
+
 interface SnapshotResponse {
 	repository: {
 		releases: { nodes: { tagName: string; isPrerelease: boolean; isDraft: boolean; publishedAt: string | null }[] };
 		refs: { nodes: { name: string }[] };
 	};
 	search: { nodes: Partial<RawPullRequest>[] };
+}
+
+interface PullRequestResponse {
+	repository: { pullRequest: RawPullRequest | null } | null;
 }
 
 interface RawPullRequest {

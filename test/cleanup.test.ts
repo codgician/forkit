@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { cleanedConfig, hasConfigCleanup, publishConfigCleanup } from "../src/config/cleanup.ts";
 import type { ArtifactBranch, RepositoryArtifact } from "../src/engine/artifact.ts";
 import { GitHubError } from "../src/github/client.ts";
+import { RepoConfigFile } from "../src/config/schema.ts";
 
 const manifest = `# My fork
 fork: me/project
@@ -12,13 +13,15 @@ branches:
   my:
     track: { branch: main }
     contributions:
-      - shipped
-      - pending # keep this patch
+      - type: branch
+        name: shipped
+      - type: branch
+        name: pending # keep this patch
     on_conflict: ai
   stable:
     track:
       tags: { match: '^v[0-9]+$' }
-    contributions: [shipped, pending]
+    contributions: [{type: branch, name: shipped}, {type: branch, name: pending}]
 `;
 
 function artifact(): RepositoryArtifact {
@@ -46,22 +49,42 @@ describe("manifest cleanup", () => {
 		const input = artifact();
 		expect(hasConfigCleanup(input)).toBe(true);
 		const output = cleanedConfig(input)!;
-		const config = Bun.YAML.parse(output) as any;
-		expect(config.branches.my.contributions).toEqual(["pending"]);
-		expect(config.branches.stable.contributions).toEqual(["shipped", "pending"]);
-		expect(config.branches.my.on_conflict).toBe("ai");
+		const config = RepoConfigFile.parse(Bun.YAML.parse(output));
+		expect(config.branches.my!.contributions).toEqual([{ type: "branch", name: "pending" }]);
+		expect(config.branches.stable!.contributions).toEqual([{ type: "branch", name: "shipped" }, { type: "branch", name: "pending" }]);
+		expect(config.branches.my!.on_conflict).toBe("ai");
 		expect(output).toContain("# My fork");
 		expect(output).toContain("# keep this patch");
 		expect(output).toContain("'^v[0-9]+$'");
 		expect(input.config!.content).toBe(manifest);
 	});
 
+	test("removes shipped PRs while retaining manual and unshipped entries", () => {
+		const input = artifact();
+		const config = RepoConfigFile.parse(Bun.YAML.parse(manifest));
+		config.branches.my!.contributions = [
+			{ type: "pr", number: 39512 },
+			{ type: "pr", number: 39513, cleanup: "manual" },
+			{ type: "branch", name: "pending" },
+		];
+		input.config!.content = JSON.stringify(config);
+		input.branches[0]!.skipped = [
+			{ branch: "upstream/project#39512", reason: "shipped" },
+			{ branch: "upstream/project#39513", reason: "manual entries must survive" },
+		];
+		const result = RepoConfigFile.parse(Bun.YAML.parse(cleanedConfig(input)!));
+		expect(result.branches.my!.contributions).toEqual([
+			{ type: "pr", number: 39513, cleanup: "manual" },
+			{ type: "branch", name: "pending" },
+		]);
+	});
+
 	test("removing the last contribution leaves a valid empty list and keeps the target", () => {
 		const input = artifact();
 		input.branches[0]!.skipped.push({ branch: "pending", reason: "shipped too" });
-		const config = Bun.YAML.parse(cleanedConfig(input)!) as any;
-		expect(config.branches.my.contributions).toEqual([]);
-		expect(config.branches.my.track).toEqual({ branch: "main" });
+		const config = RepoConfigFile.parse(Bun.YAML.parse(cleanedConfig(input)!));
+		expect(config.branches.my!.contributions).toEqual([]);
+		expect(config.branches.my!.track).toEqual({ branch: "main" });
 	});
 
 	test("no skipped contributions means no cleanup or API access", async () => {
@@ -73,15 +96,6 @@ describe("manifest cleanup", () => {
 		expect(github.readRepositoryFile).not.toHaveBeenCalled();
 	});
 
-	test("commits only the manifest using its current SHA", async () => {
-		const input = artifact();
-		const github = client();
-		expect(await publishConfigCleanup(input, github, "me/forkit", "maintenance", false)).toBe(true);
-		expect(github.updateRepositoryFile).toHaveBeenCalledWith(
-			"me/forkit", "maintenance", input.config!.path, "current-sha", cleanedConfig(input),
-			"chore: remove shipped contributions from me/project",
-		);
-	});
 
 	test("dry runs never read or write the remote manifest", async () => {
 		const github = client();

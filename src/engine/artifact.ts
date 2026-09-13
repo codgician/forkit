@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { contributionSpec, upstreamGitUrl, upstreamIdentity, type BranchRule, type ContainerSpec, type RepoConfig } from "../config/types.ts";
+import { upstreamGitUrl, upstreamIdentity, type BranchRule, type ContainerSpec, type RepoConfig } from "../config/types.ts";
 import { Git } from "../git/git.ts";
 import type { ConflictResolver, ComposedBranch } from "./compose.ts";
 import { composeBranch } from "./compose.ts";
@@ -87,9 +87,6 @@ export async function createRepositoryArtifact(
 		for (const rule of config.branches) {
 			try {
 				await fetchForkBranch(rule.name);
-				for (const input of rule.contributions) {
-					await fetchForkBranch(contributionSpec(input, !!config.upstream.repository).branch);
-				}
 				const composed = await composeBranch(rule, config, workspace.git, snapshot, github, resolver, sources);
 				await validateBranch(rule, config, composed, workspace.git);
 				const encoded = Buffer.from(rule.name).toString("hex");

@@ -25,8 +25,13 @@ branches:
         # Stable releases carry no suffix; -rc.N and -dev.N are prereleases.
         match: '^v[0-9]+\.[0-9]+\.[0-9]+$'
     contributions:
-      - litellm_configurable_copilot_headers
-      - litellm_update_github_copilot_models
+      - type: branch
+        name: litellm_configurable_copilot_headers
+      - type: branch
+        name: litellm_update_github_copilot_models
+      # Required upstream fix: https://github.com/BerriAI/litellm/pull/39512
+      - type: pr
+        number: 39512
     # Generated branch: a resolution here is private to this fork, so the
     # resolver is allowed to attempt one.
     on_conflict: ai

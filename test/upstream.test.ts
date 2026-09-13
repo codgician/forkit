@@ -56,7 +56,7 @@ async function fixture() {
 		fork: "me/ec", upstream: { git: "https://example.invalid/ec", branch: "ec-legacy" },
 		branches: {
 			"ec-legacy": { track: { branch: "ec-legacy" } },
-			my: { track: { branch: "ec-legacy" }, contributions: [{ branch: "patches/one", base, cleanup: "manual" }] },
+			my: { track: { branch: "ec-legacy" }, contributions: [{ type: "branch", name: "patches/one", base, cleanup: "manual" }] },
 		},
 	};
 	const path = join(configDir, "forkit.yaml");
@@ -91,7 +91,7 @@ describe("generic Git upstreams", () => {
 
 	test("a missing patch fails only its target, including when it is processed first", async () => {
 		const f = await fixture();
-		f.config.branches.unshift({ name: "broken", track: { kind: "branch", branch: "ec-legacy" }, contributions: ["missing"], onConflict: "fail" });
+		f.config.branches.unshift({ name: "broken", track: { kind: "branch", branch: "ec-legacy" }, contributions: [{ type: "branch", name: "missing" }], onConflict: "fail" });
 		const artifact = await createRepositoryArtifact(f.config, "test-token", undefined, f.artifactDir);
 		expect(artifact.failures?.map((failure) => failure.branch)).toEqual(["broken"]);
 		expect(artifact.branches.map((branch) => branch.name)).toEqual(["ec-legacy", "my"]);
@@ -154,12 +154,13 @@ describe("generic Git upstreams", () => {
 		const f = await fixture();
 		await f.upstream.git(["switch", "patches/one"]);
 		const second = await commit(f.upstream, "second.txt", "second patch\n");
-		await f.upstream.updateRef("refs/remotes/fork/two", second);
+		await f.upstream.addRemote("fork", f.fork.cwd);
+		await f.upstream.git(["push", f.fork.cwd, "HEAD:refs/heads/two"]);
 		const snapshot = { releases: [], tags: [], openPullRequests: [] };
-		const resolved = await resolveContribution({ branch: "two", base: f.head, cleanup: "manual" }, f.upstream, "fork", undefined, "me/ec", "ec-legacy", f.base, snapshot, new GitHub());
+		const resolved = await resolveContribution({ type: "branch", name: "two", base: f.head, cleanup: "manual" }, f.upstream, "fork", undefined, "me/ec", "ec-legacy", f.base, snapshot, new GitHub());
 		if (resolved.status !== "apply") throw Error("expected patch");
 		expect(await f.upstream.changedPathsBetween(resolved.contribution.base, resolved.contribution.head)).toEqual(["second.txt"]);
-		await expect(resolveContribution({ branch: "two", base: "f".repeat(40), cleanup: "manual" }, f.upstream, "fork", undefined, "me/ec", "ec-legacy", f.base, snapshot, new GitHub())).rejects.toThrow("declared base");
+		await expect(resolveContribution({ type: "branch", name: "two", base: "f".repeat(40), cleanup: "manual" }, f.upstream, "fork", undefined, "me/ec", "ec-legacy", f.base, snapshot, new GitHub())).rejects.toThrow("declared base");
 	});
 
 	test("Git tags support annotated and lightweight refs without release metadata", async () => {

@@ -85,13 +85,14 @@ const Container = z
  */
 const OnConflict = z.enum(["ai", "fail"]).default("fail");
 
-const Contribution = z.union([
-	z.string().min(1),
-	z.object({
-		branch: z.string().min(1),
-		base: z.string().regex(/^[0-9a-f]{40}$/, "must be a full base commit SHA").optional(),
-		cleanup: z.enum(["manual", "when-merged"]).default("manual"),
-	}).strict(),
+const ContributionOptions = {
+	base: z.string().regex(/^[0-9a-f]{40}$/, "must be a full base commit SHA").optional(),
+	cleanup: z.enum(["manual", "when-merged"]).optional(),
+};
+
+const Contribution = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("branch"), name: z.string().min(1), ...ContributionOptions }).strict(),
+	z.object({ type: z.literal("pr"), number: z.number().int().positive().safe(), ...ContributionOptions }).strict(),
 ]);
 
 const Upstream = z.union([
@@ -108,6 +109,11 @@ const Upstream = z.union([
 		branch: z.string().min(1),
 	}).strict(),
 ]);
+function contributionKey(contribution: z.infer<typeof Contribution>): string {
+	return contribution.type === "branch"
+		? `branch:${contribution.name}`
+		: `pr:${contribution.number}`;
+}
 
 const BranchRule = z
 	.object({
@@ -115,8 +121,8 @@ const BranchRule = z
 		contributions: z
 			.array(Contribution)
 			.default([])
-			.refine((list) => new Set(list.map((item) => typeof item === "string" ? item : item.branch)).size === list.length, {
-				message: "lists the same branch more than once",
+			.refine((list) => new Set(list.map(contributionKey)).size === list.length, {
+				message: "lists the same contribution more than once",
 			}),
 		on_conflict: OnConflict,
 		container: Container.optional(),
@@ -148,12 +154,11 @@ export const RepoConfigFile = z
 				context.addIssue({ code: "custom", path: ["branches", name, "track"], message: "releases require a GitHub upstream; use branch or tags for a Git URL" });
 			}
 			for (const item of rule.contributions) {
-				const branch = typeof item === "string" ? item : item.branch;
-				if (Object.hasOwn(config.branches, branch)) {
-					context.addIssue({ code: "custom", path: ["branches", name, "contributions"], message: `contribution ${branch} is also a generated target` });
+				if (item.type === "branch" && Object.hasOwn(config.branches, item.name)) {
+					context.addIssue({ code: "custom", path: ["branches", name, "contributions"], message: `contribution ${item.name} is also a generated target` });
 				}
-				if ("git" in config.upstream && typeof item !== "string" && item.cleanup === "when-merged") {
-					context.addIssue({ code: "custom", path: ["branches", name, "contributions"], message: "when-merged cleanup requires a GitHub upstream" });
+				if ("git" in config.upstream && (item.type === "pr" || item.cleanup === "when-merged")) {
+					context.addIssue({ code: "custom", path: ["branches", name, "contributions"], message: "PR contributions and when-merged cleanup require a GitHub upstream" });
 				}
 			}
 		}
