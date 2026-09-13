@@ -1,0 +1,16 @@
+fork: codgician/coreboot
+
+upstream:
+  repository: MrChromebox/coreboot
+  branch: next
+
+branches:
+  next:
+    track:
+      branch: next
+
+  my:
+    track:
+      branch: next
+    contributions: []
+    on_conflict: fail

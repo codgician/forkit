@@ -160,6 +160,7 @@ describe("loadConfig", () => {
 describe("discoverConfigFiles", () => {
 	test("finds every managed repository config", async () => {
 		expect(await discoverConfigFiles(".")).toEqual([
+			"repositories/codgician/coreboot/forkit.yaml",
 			"repositories/codgician/litellm/forkit.yaml",
 			"repositories/codgician/proxmox-nixos/forkit.yaml",
 			"repositories/codgician/redrix-ec/forkit.yaml",
