@@ -49,7 +49,7 @@ describe("loadConfig", () => {
 		const config = await loadConfig("repositories/codgician/litellm/forkit.yaml");
 
 		expect(config.fork).toBe("codgician/litellm");
-		expect(config.upstream.branch).toBe("litellm_internal_staging");
+		expect(config.upstream.branch).toBe("main");
 
 		const main = config.branches.find((b) => b.name === "main");
 		// Must be upstream's own main, not the development branch.

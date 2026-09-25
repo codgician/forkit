@@ -7,15 +7,15 @@ fork: codgician/litellm
 
 upstream:
   repository: BerriAI/litellm
-  # Development branch. Contributions without an open PR use it as their
-  # merge-base, and it is what upstream PRs base on.
-  branch: litellm_internal_staging
+  # Development branch: upstream PRs base on it, and contributions without an
+  # open PR use it as their merge-base.
+  branch: main
 
 branches:
   main:
     track:
-      # Upstream's main, not litellm_internal_staging: this fork's main was
-      # created from it, and repointing would replace its lineage.
+      # Upstream's main. This fork's main was created from it; repointing
+      # would replace its lineage.
       branch: main
 
   my:

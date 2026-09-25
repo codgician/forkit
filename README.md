@@ -16,7 +16,7 @@ fork: codgician/litellm
 
 upstream:
   repository: BerriAI/litellm
-  branch: litellm_internal_staging
+  branch: main
 
 branches:
   my:
