@@ -27,8 +27,6 @@ branches:
     contributions:
       - type: branch
         name: litellm_configurable_copilot_headers
-      - type: branch
-        name: litellm_update_github_copilot_models
       # Required upstream fix: https://github.com/BerriAI/litellm/pull/39512
       - type: pr
         number: 39512

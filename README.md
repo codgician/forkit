@@ -27,8 +27,6 @@ branches:
     contributions:
       - type: branch
         name: litellm_configurable_copilot_headers
-      - type: branch
-        name: litellm_update_github_copilot_models
       - type: pr
         number: 39512
     on_conflict: ai
