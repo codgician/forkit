@@ -199,10 +199,12 @@ graph per repository:
    managed forks. Cleanup refuses to overwrite a manifest edited since compose;
    rerun against the updated configuration in that case.
 
-A failure in one repository does not cancel another. Publication is serialized
-per repository so concurrent runs cannot race its branches or tags. Successful
-targets publish even when another target fails composition, validation, or a
-container build. The final result still fails the workflow to report the problem.
+A failure in one repository does not cancel another. Publishing runs queue
+behind each other as a whole, so no run composes from state another run is
+about to replace, and none races its branches, tags, or manifest cleanup;
+dry runs never wait. Successful targets publish even when another target fails
+composition, validation, or a container build. The final result still fails the
+workflow to report the problem.
 Cleanup includes only successfully published targets. Push events
 exercise composition and builds in dry-run mode; scheduled and explicit runs
 may publish.

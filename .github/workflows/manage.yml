@@ -29,6 +29,13 @@ permissions:
   contents: read
   packages: write
 
+# Live runs push forks, images, and manifest cleanup; overlapping ones would
+# race on branch leases and moving tags. They queue instead. Dry runs, which
+# mutate nothing, never wait and never displace a queued live run.
+concurrency:
+  group: manage-forks-${{ (github.event_name == 'push' || inputs.dry_run) && github.run_id || 'live' }}
+  cancel-in-progress: false
+
 jobs:
   discover:
     runs-on: ubuntu-24.04

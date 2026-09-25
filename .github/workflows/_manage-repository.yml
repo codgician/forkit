@@ -138,9 +138,6 @@ jobs:
       !inputs.dry_run
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    concurrency:
-      group: publish-${{ inputs.repository }}
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
