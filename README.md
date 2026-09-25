@@ -109,8 +109,9 @@ an ancestor of the contribution head and defines exactly its delta, including
 when patches are stacked. Without it, manual branches use the merge-base with
 `upstream.branch`. Manual branch patches never query PRs; manual entries are
 never automatically skipped or removed. An empty application fails for
-inspection instead of deleting configuration. Patch inputs cannot also be
-generated target branches.
+inspection instead of deleting configuration, except for a merged PR: its
+changes already being in the source (e.g. through a backport) prove it shipped.
+Patch inputs cannot also be generated target branches.
 
 Keep durable edits on the patch branches. `my` is generated and may be rewritten
 as upstream advances. Tags use semantic version ordering when possible, then
@@ -150,7 +151,8 @@ native lid/MKBP tests, and the backlight regression test.
   targets can still advance; an unpatched mirror is independent of patch failures.
 - **Merged contributions remain until shipped.** A contribution is skipped
   only after its pull request is merged and the tracked source contains that
-  merge. After successful publication, the pipeline commits a manifest update
+  merge, or its changes when upstream backported them as a different commit.
+  After successful publication, the pipeline commits a manifest update
   removing it from that target's `contributions` list. Targets tracking older
   sources retain it. A deleted PR head is supported once shipped; a branch
   with new commits beyond the merged PR is retained.

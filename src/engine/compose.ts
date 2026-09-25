@@ -150,7 +150,11 @@ export async function composeBranch(
 	await git.checkoutDetached(sourceCommit);
 	for (const outcome of outcomes) {
 		if (outcome.status === "skip") continue;
-		await applyContribution(outcome, rule, config, git, source, resolver, fingerprint);
+		const shipped = await applyContribution(outcome, rule, config, git, source, resolver, fingerprint);
+		if (shipped) {
+			applied.splice(applied.indexOf(outcome.contribution.branch), 1);
+			skipped.push({ branch: outcome.contribution.branch, reason: shipped });
+		}
 	}
 
 	const commit = await git.revParse("HEAD");
@@ -167,6 +171,10 @@ export async function composeBranch(
 	};
 }
 
+/**
+ * Apply one contribution and commit it. Returns the reason it was skipped
+ * instead when a merged PR turns out to be already present in the source.
+ */
 async function applyContribution(
 	outcome: Extract<ContributionOutcome, { status: "apply" }>,
 	rule: BranchRule,
@@ -175,7 +183,7 @@ async function applyContribution(
 	source: ResolvedSource,
 	resolver: ConflictResolver | undefined,
 	fingerprint: string,
-): Promise<void> {
+): Promise<string | undefined> {
 	const { branch, base, head, pullRequest } = outcome.contribution;
 	const baseline = await git.revParse("HEAD");
 
@@ -215,6 +223,12 @@ async function applyContribution(
 	}
 
 	if (await git.isClean()) {
+		// A merged PR can reach a release as a backport, a different commit than
+		// its merge, so ancestry misses it. Applying it then changes nothing:
+		// it shipped, and config cleanup may remove it.
+		if (pullRequest?.merged) {
+			return `merged upstream as #${pullRequest.number} and its changes are already present in ${source.ref}`;
+		}
 		throw new ComposeError(`Applying "${branch}" produced no change`, rule.name);
 	}
 
@@ -224,6 +238,7 @@ async function applyContribution(
 		// every hour. The contribution head's date is stable and meaningful.
 		{ date: await git.commitDate(head) },
 	);
+	return undefined;
 }
 
 async function resolveConflict(

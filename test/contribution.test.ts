@@ -9,6 +9,8 @@ import {
 } from "../src/engine/contribution.ts";
 import { Git } from "../src/git/git.ts";
 import { type GitHub, GitHubError, type PullRequest, type UpstreamSnapshot } from "../src/github/client.ts";
+import { composeBranch } from "../src/engine/compose.ts";
+import type { BranchRule, RepoConfig } from "../src/config/types.ts";
 
 const UPSTREAM_REPOSITORY = "upstream/project";
 const FORK_REPOSITORY = "fork/project";
@@ -329,6 +331,56 @@ describe("resolveContribution", () => {
 			github({ pullRequests: { 7: metadata } }),
 		);
 		expect(shippedPullRequestOutcome).toMatchObject({ status: "skip", branch: "upstream/project#7" });
+	});
+
+	test("a merged PR shipped as a backport is skipped as shipped, not failed", async () => {
+		const upstream = await newBareRepo("backport-upstream");
+		const fork = await newBareRepo("backport-fork");
+		const seed = await newRepo("backport-seed");
+		await seed.addRemote("upstream", upstream.cwd);
+
+		const base = await commitFile(seed, "base.txt", "base\n", "base");
+		await seed.git(["checkout", "--quiet", "-b", "topic", base]);
+		const head = await commitFile(seed, "fix.txt", "the fix\n", "topic fix");
+		await pushRef(seed, "upstream", head, "refs/pull/9/head");
+		await seed.git(["checkout", "--quiet", "main"]);
+		await seed.merge("topic", "merge pull request #9");
+		const merge = await seed.revParse("HEAD");
+		await seed.pushFastForward("upstream", "main", merge);
+
+		// A release line cut before the merge, carrying the fix as its own commit.
+		await seed.git(["checkout", "--quiet", "-b", "release", base]);
+		await commitFile(seed, "release.txt", "release\n", "release prep");
+		await seed.git(["cherry-pick", "--quiet", head]);
+		const backported = await seed.revParse("HEAD");
+		expect(await seed.isAncestor(merge, backported)).toBe(false);
+		await seed.pushFastForward("upstream", "release", backported);
+
+		const checkout = await newRepo("backport-checkout");
+		await checkout.addRemote("upstream", upstream.cwd);
+		await checkout.addRemote("fork", fork.cwd);
+		const client = github({
+			pullRequests: {
+				9: pullRequest({ number: 9, headSha: head, state: "closed", merged: true, mergeCommitSha: merge }),
+			},
+		});
+		const config: RepoConfig = {
+			fork: FORK_REPOSITORY,
+			upstream: { repository: UPSTREAM_REPOSITORY, branch: "main" },
+			branches: [],
+			configDir: checkout.cwd,
+		};
+		const rule: BranchRule = {
+			name: "my",
+			track: { kind: "branch", branch: "release" },
+			contributions: [{ type: "pr", number: 9 }],
+			onConflict: "fail",
+		};
+
+		const composed = await composeBranch(rule, config, checkout, snapshot(), client, undefined);
+		expect(composed.commit).toBe(backported);
+		expect(composed.applied).toEqual([]);
+		expect(composed.skipped).toMatchObject([{ branch: "upstream/project#9" }]);
 	});
 
 	test("does not fall back to a same-named fork branch when an explicit PR is missing", async () => {
