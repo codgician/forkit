@@ -7,7 +7,7 @@ import {
 	createAgentSession,
 } from "@mariozechner/pi-coding-agent";
 import type { ConflictResolver, ResolverContext, ResolverOutcome } from "../engine/compose.ts";
-import { DENDRO_PROVIDER, dendroModel } from "./model.ts";
+import { DENDRO_PROVIDER, RESOLVER_MODEL, dendroModel } from "./model.ts";
 import { SYSTEM_PROMPT, buildPrompt } from "./prompt.ts";
 import { createResolverToolPolicy } from "./tool-policy.ts";
 import { Trajectory } from "./trajectory.ts";
@@ -15,13 +15,6 @@ import { Trajectory } from "./trajectory.ts";
 export interface AiResolverOptions {
 	apiKey: string;
 	trajectoryDirectory: string;
-	/**
-	 * Reasoning effort. Configurable because `xhigh` is model-specific and this
-	 * request passes through a proxy that may not forward it; the recorded token
-	 * usage is what confirms whether it took effect.
-	 */
-	thinkingLevel?: "low" | "medium" | "high" | "xhigh";
-	timeoutMs?: number;
 }
 
 /**
@@ -36,7 +29,7 @@ export class AiConflictResolver implements ConflictResolver {
 	constructor(private readonly options: AiResolverOptions) {}
 
 	async resolve(context: ResolverContext): Promise<ResolverOutcome> {
-		const thinkingLevel = this.options.thinkingLevel ?? "xhigh";
+		const { thinkingLevel, timeoutMs } = RESOLVER_MODEL;
 		const model = dendroModel();
 		const trajectory = new Trajectory(
 			`conflict-${Date.now()}-${context.conflict.paths.length}f`,
@@ -98,10 +91,7 @@ export class AiConflictResolver implements ConflictResolver {
 			});
 		});
 
-		const deadline = setTimeout(
-			() => void session.abort(),
-			this.options.timeoutMs ?? 10 * 60_000,
-		);
+		const deadline = setTimeout(() => void session.abort(), timeoutMs);
 
 		try {
 			const diff3 = await context.git.diff(["--diff-filter=U"]);

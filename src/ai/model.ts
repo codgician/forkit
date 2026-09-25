@@ -1,18 +1,37 @@
-import type { Model } from "@mariozechner/pi-ai";
+import type { Model, ThinkingLevel } from "@mariozechner/pi-ai";
+
+export const DENDRO_PROVIDER = "dendro";
 
 /**
- * The model forkit resolves conflicts with, served through a LiteLLM proxy.
+ * The single declaration of which model resolves conflicts, how hard it
+ * thinks, and how long it may take. Change the resolver's model here only.
+ *
+ * `xhigh` is model-specific and passes through a proxy that may not forward
+ * it; the reasoning tokens recorded in each trajectory confirm it took effect.
+ */
+export const RESOLVER_MODEL: {
+	readonly id: string;
+	readonly name: string;
+	readonly thinkingLevel: ThinkingLevel;
+	readonly timeoutMs: number;
+} = {
+	id: "gpt-6-luna",
+	name: "GPT-6 Luna (dendro)",
+	thinkingLevel: "xhigh",
+	timeoutMs: 60 * 60_000,
+};
+
+/**
+ * The resolver model, served through a LiteLLM proxy.
  *
  * `compat` is set explicitly rather than left to pi's auto-detection: pi infers
  * OpenAI-compatibility flags from the base URL, and a private proxy hostname
  * matches none of its known patterns, so it would otherwise guess.
  */
-export const DENDRO_PROVIDER = "dendro";
-
 export function dendroModel(): Model<"openai-completions"> {
 	return {
-		id: "gpt-5.6-luna",
-		name: "GPT-5.6 Luna (dendro)",
+		id: RESOLVER_MODEL.id,
+		name: RESOLVER_MODEL.name,
 		api: "openai-completions",
 		provider: DENDRO_PROVIDER,
 		baseUrl: process.env.DENDRO_BASE_URL ?? "https://dendro.codgician.me/v1",
