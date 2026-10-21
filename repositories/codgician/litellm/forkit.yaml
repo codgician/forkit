@@ -1,7 +1,7 @@
 # Forkit configuration for codgician/litellm.
 #
 # main  mirrors upstream's own main branch, unpatched, never built.
-# my    tracks the newest stable release and carries the contributions below.
+# my    tracks upstream's main branch and carries the contributions below.
 
 fork: codgician/litellm
 
@@ -20,10 +20,7 @@ branches:
 
   my:
     track:
-      releases:
-        prerelease: false
-        # Stable releases carry no suffix; -rc.N and -dev.N are prereleases.
-        match: '^v[0-9]+\.[0-9]+\.[0-9]+$'
+      branch: main
     contributions:
       - type: branch
         name: litellm_configurable_copilot_headers
