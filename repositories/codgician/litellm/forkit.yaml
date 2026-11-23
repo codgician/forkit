@@ -29,6 +29,9 @@ branches:
     on_conflict: ai
     container:
       image: ghcr.io/codgician/litellm
+      # Upstream moved its Dockerfile under litellm/deploy (BerriAI/litellm#50981);
+      # the build context stays the repository root.
+      dockerfile: litellm/deploy/docker/Dockerfile
       # One manifest list per tag: the tag never encodes an architecture.
       platforms:
         - linux/amd64
